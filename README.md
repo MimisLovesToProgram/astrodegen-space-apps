@@ -5,8 +5,11 @@ An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is
 ## Structure
 
 ```text
-frontend/   Flutter app
-src/        Sensors and Python data pipeline
+src/
+  app_frontend/   Flutter app
+  ingest_validate/ Data pipeline
+  biosensors.py   Synthetic sensors
+  astrocrates.py  Pipeline commands
 backend/    PocketBase configuration and APIs
 tests/      Python and backend tests
 docs/       Architecture and task schedule

@@ -15,3 +15,7 @@ The project is now named **Astrocrates**. ASTRODEGEN remains the team/repository
 ## Durable capture and shared API backend
 
 Step 1 stores raw timestamped packets before validation. Step 2 processes the pending inbox and commits metric results together with processed markers. Raw packets are stored once per delivery, rather than repeated in every metric's audit payload. PocketBase supplies the shared API backend; local SQLite remains an explicit offline development option. They are independent stores, without automatic synchronization. PocketBase migrations and hooks are tested against v0.40.6.
+
+## Restore the frontend location
+
+The Flutter app is back at `src/app_frontend/`, preserving its original files, contents, and platform folder layout. The root-level `frontend/` folder was moved without changes to the Flutter project.
