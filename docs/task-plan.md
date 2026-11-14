@@ -17,7 +17,7 @@ This plan excludes the existing Flutter UI and UI redesign. It covers the sensor
 | T09 | Implement physiological, behavioral, immune, and bone assessment calculations | Pending | T08 | Deterministic unit tests against the agreed formulas; no medical claims beyond the prototype |
 | T10 | Persist assessment results and support failed-assessment retry | Pending | T09 | Versioned results linked to input history; retry works without re-ingesting duplicate measurements |
 | T11 | Add bounded live ingestion and backend transport | Capture, worker, and history API implemented; assessment delivery pending | T03, T07, T10 | PocketBase APIs and SQLite offline commands are tested; connect the real assessor once T09/T10 exist |
-| T12 | Add data-quality monitoring | Pending | T03, T05 | Missing/stale data reports, quality summaries, sensor reliability rules agreed with team |
+| T12 | Add data-quality monitoring | Missing/stale metrics and per-source acceptance summaries implemented; physical sensor reliability and automated alerts pending | T03, T05 | Missing/stale data reports, quality summaries, sensor reliability rules agreed with team |
 | T13 | Verify the complete non-UI demo and handoff | Partly implemented | T09, T10, T11, T12 | Full sensor -> validation -> assessment run, replay/failure tests, setup and demo instructions |
 
 T09 requires agreed formulas before implementation. A physiological change can be a valid observation and still matter to assessment; baseline deviations must not silently remove those observations from Step 3. The current adapter and assessment hook do not mean T09 is complete.
@@ -44,15 +44,22 @@ The project now uses a single Astrocrates layout: `src/` (with the Flutter app i
 
 ## Step 2 handoff checklist
 
-The Step 2 implementation is complete for the synthetic prototype. Validation, unit conversion, raw capture, clean storage, duplicate/conflict handling, recovery, APIs, and the Step 3 data interface are implemented. All 37 tests pass with the installed PocketBase v0.42.2.
+The Step 2 implementation is complete for the synthetic prototype. Validation, unit conversion, raw capture, clean storage, duplicate/conflict handling, recovery, APIs, and the Step 3 data interface are implemented. The local backend and the isolated integration suite are verified with PocketBase v0.42.2.
 
 The remaining work for the Step 2 owner is:
 
 - [ ] Confirm the sensor contract with the Step 1 owner: resting HR, HRV method, units, source identifiers, timestamp policy, and sampling frequency (T03).
-- [ ] Start PocketBase from `backend/pocketbase/` so the committed migrations are applied to the actual local database.
-- [ ] Configure ingest/worker/reader service accounts and environment settings for the local demo.
-- [ ] Run capture -> process -> history on the actual local backend and check the records in its dashboard; existing integration tests use temporary databases.
-- [ ] Agree the history window and hand off the normalized observation contract to the Step 3 owner (T08).
+- [x] Apply the committed migrations to the actual local PocketBase database and start the local service.
+- [x] Configure ingest/worker/reader accounts with private local environment files; preserve the existing administrator.
+- [x] Verify capture -> process -> history against the actual backend: 21 mission packets, 252 clean observations, 252 replay duplicates, one quarantine, and one preserved conflict.
+- [x] Publish a versioned observation contract, configurable history export, and sample handoff data.
+- [ ] Review the prototype sensor mappings and required history window with the Step 1 and Step 3 owners (T03/T08).
 - [ ] Connect the real assessment engine when T09 is available, then verify failure and retry behavior (T10/T11/T13).
 
-Missing/stale-data monitoring, sensor reliability scoring, and quality summaries (T12) are additional work. Risk formulas, baseline assessment calculations, and persistent risk results are not implemented and belong to Step 3. The existing UI is outside this owner's implementation scope; live UI/backend integration is still pending.
+Missing/stale metric reporting and per-source data acceptance summaries (T12) are implemented. Physical sensor reliability, interval-gap policies, and automated alert delivery remain additional work. Risk formulas, baseline assessment calculations, and persistent risk results are not implemented and belong to Step 3. The existing UI is outside this owner's implementation scope; live UI/backend integration is still pending.
+
+## Latest Step 2 checkpoint
+
+The actual local PocketBase service is configured, with no pending packets after verification. The synthetic mission and follow-up audit checks leave 44 processed deliveries and 252 unique clean observations. Quality reporting and versioned Step 3 exports work through the CLI. The original administrator is preserved, temporary setup administrators are removed, and credentials/runtime data remain ignored by Git.
+
+Remaining dependencies are team agreement on real sensor semantics/history windows and the Step 3 assessment implementation. Step 2 does not implement risk formulas, persistent assessment jobs, or UI integration. Inline explanatory comments cover the non-frontend programs and tests; frontend files were not changed.

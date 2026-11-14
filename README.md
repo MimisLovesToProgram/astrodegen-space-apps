@@ -40,4 +40,4 @@ For the shared API backend, follow the [PocketBase setup](backend/pocketbase/REA
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-See the [pipeline guide](docs/pipeline.md) and [non-UI task schedule](docs/task-plan.md).
+See the [pipeline guide](docs/pipeline.md), [sensor contract](docs/sensor-contract.md), and [task schedule](docs/task-plan.md).

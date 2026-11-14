@@ -6,3 +6,5 @@
 The official challenge brief, source URL, research references, and dataset provenance still need to be recorded. Existing sensor examples are synthetic.
 
 - [PocketBase setup and API boundaries](../backend/pocketbase/README.md).
+
+- [Versioned sensor and assessment handoff contract](sensor-contract.md).
