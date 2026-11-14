@@ -22,6 +22,8 @@ from ingest_validate.pocketbase import PocketBaseError, PocketBaseTelemetry
 class PocketBaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Launch a real server with temporary storage and generated credentials.
+        # No account or collection on the configured local demo is modified.
         cls.directory = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.directory.cleanup)
         cls.log = open(Path(cls.directory.name) / "server.log", "w+")
@@ -113,6 +115,8 @@ class PocketBaseTests(unittest.TestCase):
         self.assertEqual(len(self.worker.get_history("a")), 12)
 
     def test_commit_failure_rolls_back_entire_packet(self):
+        # Reject a later normalized result after an earlier result was written;
+        # no partial clean history may survive the failed server transaction.
         captured = self.capture()
         record = self.worker.request("GET", "/api/collections/sensor_packets/records/" + captured["id"])
         results = self.worker.validation_results(record)

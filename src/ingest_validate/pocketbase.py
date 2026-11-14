@@ -29,6 +29,8 @@ class PocketBaseTelemetry:
         self.timeout = timeout
 
     def request(self, method, path, body=None, query=None):
+        # Encode filters as query parameters instead of concatenating user
+        # input into a URL. Credentials are sent in headers or request bodies.
         suffix = "?" + urlencode(query) if query else ""
         headers = {"Content-Type": "application/json"}
         if self.token:
@@ -74,6 +76,8 @@ class PocketBaseTelemetry:
         payload, encoding = _raw_payload(packet)
         captured = packet.get("timestamp") if isinstance(packet, dict) else None
         body = {
+            # Construct this envelope once: a network retry must retain the
+            # same delivery key rather than insert a second raw delivery.
             "delivery_key": delivery_key or uuid.uuid4().hex,
             "payload": payload, "payload_encoding": encoding,
             "captured_at": captured if isinstance(captured, str) else "",
@@ -88,6 +92,8 @@ class PocketBaseTelemetry:
                     raise
 
     def validation_results(self, record):
+        # Validate against the stored receive/replay clock. Waiting to process
+        # a packet must not make its originally future timestamp acceptable.
         packet = json.loads(record["payload"]) if record["payload_encoding"] == "json" else record["payload"]
         clock = datetime.fromisoformat((record["validation_time"] or record["received_at"]).replace("Z", "+00:00"))
         results = []
@@ -133,6 +139,8 @@ class PocketBaseTelemetry:
         page = 1
         page_size = min(limit, 500)
         while len(history) < limit:
+            # PocketBase paginates records; unwrap only normalized observations
+            # and respect the caller's limit rather than returning API metadata.
             records = self.request("GET", "/api/collections/validated_observations/records", query={
                 "filter": "astronaut_id=" + json_string(astronaut_id),
                 "sort": "-captured_at,-id", "perPage": page_size, "page": page, "skipTotal": "true",

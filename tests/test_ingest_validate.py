@@ -13,6 +13,8 @@ NOW = datetime(2026, 11, 14, 12, tzinfo=timezone.utc)
 
 
 def measurement(**changes):
+    # Keep a valid default envelope and override one field at a time to isolate
+    # the validation rule under test.
     raw = {
         "astronaut_id": "crew_01", "metric": "hr_resting", "value": 135,
         "unit": "bpm", "captured_at": "2026-11-14T11:30:00Z",

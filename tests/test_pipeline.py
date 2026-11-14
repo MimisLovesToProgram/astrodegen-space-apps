@@ -27,6 +27,8 @@ class PipelineTests(unittest.TestCase):
         packets, clock = simulated_mission()
         calls = []
         def assess(crew_id, history):
+            # Record what Step 3 receives without pretending to implement risk
+            # calculations. The assertions below verify the integration boundary.
             calls.append((crew_id, history))
             return {"test_received": len(history)}
         result = process_sensor_packets(packets, self.db, reference_time=clock, assume_utc=True, assess=assess)

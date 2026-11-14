@@ -20,6 +20,8 @@ class SetupTests(unittest.TestCase):
                 probe.bind(("127.0.0.1", 0))
                 port = probe.getsockname()[1]
             options = dict(binary=os.environ["POCKETBASE_TEST_BINARY"],
+                           # Keep account files and server data inside this
+                           # test's temporary directory during both setup runs.
                            data_dir=root / "pb_data", env_dir=root, port=port, keep_running=False)
             subprocess.run([options["binary"], "superuser", "create", "owner@example.invalid", "test-owner-password-123",
                             "--dir", str(options["data_dir"]), "--dev=false"], check=True,

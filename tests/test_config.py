@@ -14,6 +14,8 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text('POCKETBASE_PASSWORD="$(do-not-execute)"\nPOCKETBASE_URL=http://local\n')
+            # Shell-looking text must remain a literal password; only explicit
+            # environment settings should override the local file's values.
             self.assertEqual(read_settings(path)["POCKETBASE_PASSWORD"], "$(do-not-execute)")
             with patch.dict(os.environ, {"POCKETBASE_URL": "http://override"}, clear=True):
                 self.assertEqual(connection_settings(path)["POCKETBASE_URL"], "http://override")

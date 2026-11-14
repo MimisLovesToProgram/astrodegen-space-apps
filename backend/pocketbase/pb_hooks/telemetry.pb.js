@@ -21,6 +21,8 @@ routerAdd("POST", "/api/astrocrates/capture", (e) => {
       "producer = {:producer} && delivery_key = {:key}", "", 1, 0,
       {producer: e.auth.id, key: body.delivery_key});
     if (existing.length) {
+      // A reused delivery key is safe only when the original content and
+      // clock policy match. Changed content requires a new delivery key.
       const record = existing[0];
       if (record.getString("payload") !== body.payload ||
           record.getString("payload_encoding") !== body.payload_encoding ||
@@ -73,6 +75,8 @@ routerAdd("POST", "/api/astrocrates/commit", (e) => {
   let alreadyProcessed = false;
   $app.runInTransaction((tx) => {
     const packet = tx.findRecordById("sensor_packets", body.packet_id);
+    // Recheck inside the transaction: another worker may have committed this
+    // packet after the caller listed pending records.
     if (packet.getString("status") === "processed") {
       alreadyProcessed = true;
       return;
@@ -93,6 +97,8 @@ routerAdd("POST", "/api/astrocrates/commit", (e) => {
         const existing = tx.findRecordsByFilter("validated_observations",
           "identity_key = {:key}", "", 1, 0, {key: result.identity_key});
         if (existing.length) {
+          // Preserve the first accepted value. A changed value at the same
+          // identity is a conflict, not an update that erases audit history.
           status = existing[0].getString("content_key") === result.content_key ? "duplicate" : "conflict";
           if (status === "conflict") errors = ["A different measurement already exists at this identity"];
         } else {

@@ -33,6 +33,8 @@ def ingest_batch(measurements, db_path="data/telemetry.sqlite", reference_time=N
     received_at = utc_string(now)
     with closing(connect_database(db_path)) as connection:
         with connection:
+            # Acquire the write lock before checking observation identities so
+            # two local writers cannot both decide a measurement is new.
             connection.execute("BEGIN IMMEDIATE")
             return _ingest_on_connection(connection, measurements, received_at=received_at, reference_time=now)
 
@@ -45,6 +47,8 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
         status, errors = result["status"], result["errors"]
         observation = result["observation"]
         if observation is not None:
+            # Identity finds a measurement; normalized content distinguishes a
+            # harmless retransmission from a changed value at that identity.
             identity = tuple(observation[key] for key in (
                 "astronaut_id", "metric", "captured_at", "source"
             ))
@@ -64,6 +68,8 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
                     errors = ["A different measurement already exists at this identity"]
 
         payload, encoding = _raw_payload(raw)
+        # Audit every outcome, including duplicates, while linking back to the
+        # original packet instead of repeating the entire packet in each row.
         cursor = connection.execute(
             """INSERT INTO raw_measurements
                (received_at, payload, payload_encoding, status, errors_json, sensor_packet_id)

@@ -74,6 +74,8 @@ def sensor_batches(mode="story", ticks=None):
 
 
 def report_processed(store, result):
+    # Export clean history for affected crews while stating explicitly that
+    # no actual health assessment engine has been configured yet.
     ingestion = result["ingestion"]
     crew = sorted({item["astronaut_id"] for item in ingestion["accepted"]})
     return {
@@ -90,6 +92,8 @@ def main():
     parser.add_argument("--db", default="data/telemetry.sqlite", help="SQLite development database")
     parser.add_argument("--env-file", help="PocketBase settings file; default is .env in the current directory")
     actions = parser.add_subparsers(dest="action", required=True)
+    # Capture, validation, monitoring, and handoff are separate commands so
+    # the same workflow can run interactively or as independent processes.
     capture = actions.add_parser("capture", help="Step 1: save original timestamped packets before validation")
     capture.add_argument("--mode", choices=("story", "noise"), default="story")
     capture.add_argument("--ticks", type=int, help="Default: seven story ticks or continuous noise")
@@ -122,6 +126,8 @@ def main():
         print(json.dumps(observation_contract(), indent=2, allow_nan=False))
         return
     if args.backend == "pocketbase":
+        # The command interface is shared by both storage implementations;
+        # database credentials are resolved only for the HTTP backend.
         from ingest_validate.pocketbase import PocketBaseTelemetry
         store = PocketBaseTelemetry.from_environment(args.env_file)
     else:

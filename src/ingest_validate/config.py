@@ -17,6 +17,7 @@ def read_settings(path):
         if not separator or not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
             raise ValueError(f"Invalid setting on line {number}")
         if value.startswith('"'):
+            # Decode quoted data only; never expand variables or run commands.
             value = json.loads(value)
         elif value.startswith("'") and value.endswith("'"):
             value = value[1:-1]

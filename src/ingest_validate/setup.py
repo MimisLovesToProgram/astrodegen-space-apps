@@ -41,6 +41,8 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
     env_dir.mkdir(parents=True, exist_ok=True)
     url = f"http://127.0.0.1:{port}"
     credentials = {}
+    # Separate local files let each process use the smallest required role.
+    # Reruns reuse these values instead of rotating existing service passwords.
     for role in ("ingest", "worker", "reader"):
         path = env_dir / (".env" if role == "worker" else ".env." + role)
         if path.exists():
@@ -128,6 +130,8 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
                             handle.write(key + "=" + json.dumps(value) + "\n")
                 os.chmod(path, 0o600)
             admin.request("DELETE", "/api/collections/_superusers/records/" + temporary_id)
+            # The temporary provisioning token is no longer needed once the
+            # least-privilege service accounts can authenticate independently.
             created_admin = False
             completed = True
         finally:

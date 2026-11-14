@@ -11,6 +11,8 @@ class ContractTests(unittest.TestCase):
         contract = observation_contract()
         self.assertEqual(contract["contract_version"], CONTRACT_VERSION)
         for metric, rule in NUMERIC_RULES.items():
+            # Check the actual rule data rather than maintain a second,
+            # independently editable list of expected bounds and units.
             self.assertEqual(contract["metrics"][metric]["unit"], rule[0])
             self.assertEqual(contract["metrics"][metric]["minimum"], rule[1])
             self.assertEqual(contract["metrics"][metric]["maximum"], rule[2])

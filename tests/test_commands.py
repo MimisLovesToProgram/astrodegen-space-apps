@@ -21,6 +21,8 @@ class CommandTests(unittest.TestCase):
             db = str(Path(directory) / "mission.sqlite")
             base = [sys.executable, "-m", "astrocrates", "--backend", "sqlite", "--db", db]
             def run(*arguments):
+                # Exercise the same executable commands used in the README;
+                # parse their output instead of calling internal helpers only.
                 return [json.loads(line) for line in subprocess.check_output(
                     [*base, *arguments], env=env, cwd=root, text=True,
                 ).splitlines() if line.strip()]

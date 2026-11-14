@@ -40,6 +40,8 @@ class QualityTests(unittest.TestCase):
                 quality_report([], "a", max_age_seconds=age, reference_time=self.clock)
 
     def test_retransmissions_do_not_inflate_acceptance_rate(self):
+        # A source that repeats old packets should not receive a better
+        # acceptance rate than a source delivering the same data once.
         report = summarize_audit({"packets": {"pending": 1, "processed": 3}, "results": [
             {"source": "sensor", "status": "accepted", "total": 3},
             {"source": "sensor", "status": "quarantined", "total": 1},

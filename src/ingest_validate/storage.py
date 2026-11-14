@@ -5,6 +5,8 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
+# The inbox owns original deliveries, raw_measurements records metric outcomes,
+# and validated_observations contains only unique, accepted normalized data.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sensor_packets (
     id INTEGER PRIMARY KEY,

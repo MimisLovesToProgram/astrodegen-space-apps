@@ -45,6 +45,8 @@ def sensor_observations(packets, *, assume_utc=False):
             except ValueError:
                 pass  # Let the validator audit the malformed timestamp.
         for field, (metric, unit) in SENSOR_FIELDS.items():
+            # A missing field becomes None and is quarantined independently;
+            # other valid fields from the same packet can still be accepted.
             yield {
                 "astronaut_id": packet.get("crew_id"), "metric": metric,
                 "value": packet.get(field), "unit": unit,
@@ -59,6 +61,7 @@ def ingest_sensor_packets(packets, db_path="data/telemetry.sqlite", *, assume_ut
     from .worker import validate_pending_packets
 
     packet_ids = capture_sensor_packets(
+        # Commit raw deliveries before starting any measurement validation.
         packets, db_path, assume_utc=assume_utc, reference_time=reference_time,
     )
     summary = {"accepted": [], "quarantined": [], "duplicates": [], "conflicts": []}
