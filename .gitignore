@@ -23,3 +23,7 @@ build/
 .vscode/
 .DS_Store
 *~
+
+# Local telemetry output (raw and validated records)
+/data/
+/challenges/health-monitoring/data/

@@ -6,7 +6,7 @@ Team workspace for NASA Space Apps Challenge preparation, challenge exploration,
 
 ```text
 challenges/
-  health-monitoring/   # ASTRA: initial astronaut health monitoring concept
+  health-monitoring/   # ASTRA: sensor simulator, ingestion, and Flutter prototype
 ideas/                # Alternative challenge ideas and comparisons
 shared/               # Resources used by multiple challenges
 docs/                 # Team workflow and project decisions
@@ -24,4 +24,4 @@ Use `ideas/README.md` to compare options before starting another prototype.
 
 See [the team workflow](docs/team-workflow.md). Team members need repository access before they can push branches. Use branches and pull requests for implementation work.
 
-This repository currently contains planning documents and empty source/test directories. No application has been implemented yet.
+The health-monitoring prototype contains a synthetic sensor generator, a tested Python ingestion and validation pipeline with SQLite storage, and a Flutter interface prototype. Health-risk assessment is still pending. See the [challenge guide](challenges/health-monitoring/README.md) for commands and the [non-UI task schedule](challenges/health-monitoring/docs/task-plan.md) for remaining work.

@@ -1,3 +1,6 @@
 # Health monitoring documentation
 
-Add the official challenge brief and source URL, research references, dataset provenance, architecture, and validation notes here as the project develops.
+- [Pipeline contracts and integration](pipeline.md): sensor mapping, validation, raw and clean storage, and the Step 3 function interface.
+- [Non-UI task plan and schedule](task-plan.md): current implementation, remaining work, dependencies, and a proposed working-day schedule.
+
+The official challenge brief, source URL, research references, and dataset provenance still need to be recorded. Existing sensor examples are synthetic.
