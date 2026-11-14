@@ -1,26 +1,24 @@
-# Sensor, ingestion, and assessment contracts
-
-## Current connection
+# Capture, validation, and assessment contracts
 
 ```text
-biosensors.py (synthetic packet)
-  -> adapters.sensor_observations (one observation per metric)
-  -> validation.validate_observation
-  -> service.ingest_batch
-       -> raw_measurements (every delivery)
-       -> validated_observations (accepted, unique observations)
-  -> pipeline.process_sensor_packets
-       -> get_validated_observations (history per affected crew member)
-       -> assess(astronaut_id, history), when provided by Step 3
+Step 1: synthetic sensor packet with capture timestamp
+  -> durable sensor_packets inbox (pending, original payload stored once)
+Step 2: bounded worker reads pending packets
+  -> adapter expands one observation per metric
+  -> validator checks formatting, units, timestamps, and plausibility
+  -> transaction commits per-metric outcomes + clean observations + processed marker
+Step 3: clean historical observations
+  -> optional assessment function / authenticated history API
+  -> risk calculations still to be implemented
 ```
 
-Step 2 checks data quality. A valid heart rate of 135 bpm passes through without a health-risk label. Health interpretation belongs to the assessment engine, which is not implemented in this repository.
+Step 1 persists data before validation. Invalid packets remain available for inspection. Step 2 never assigns health-risk labels: a heart rate of 135 bpm can pass data-quality checks. Step 3 owns interpretation.
 
-## Sensor adapter
+## Sensor mapping
 
-The adapter expects the full packet emitted by `src/biosensors.py`. It maps `crew_id` to `astronaut_id` and `timestamp` to `captured_at`.
+The adapter expects the existing full `src/biosensors.py` packet, maps `crew_id` to `astronaut_id`, and maps `timestamp` to `captured_at`.
 
-| Sensor field | Step 2 metric | Unit |
+| Sensor field | Normalized metric | Unit |
 | --- | --- | --- |
 | `hr` | `hr_resting` | `bpm` |
 | `hrv` | `hrv_rmssd` | `ms` |
@@ -33,36 +31,54 @@ The adapter expects the full packet emitted by `src/biosensors.py`. It maps `cre
 | `exercise_logged`, `social_interaction` | same | `bool` |
 | `mission_day` | same | `day` |
 
-The `hr` and `hrv` mappings are prototype assumptions: the generator does not specify resting conditions or the HRV method. Confirm resting HR and RMSSD with the sensor owner before using these names for other data. Do not apply this adapter to real sensors without a separate schema and provenance agreement.
+Resting HR and RMSSD are prototype assumptions that still need confirmation with the sensor owner. Data is labeled simulated and sourced from `synthetic_biosensors`; that label does not authenticate a physical device. Extra fields remain in the original payload. Missing metric fields are quarantined individually. Non-object packets and diagnostic representations of non-JSON inputs are quarantined as whole deliveries.
 
-The adapter marks data as simulated and uses `synthetic_biosensors` as its source. It retains the entire original sensor packet on each expanded raw observation under `sensor_packet`; the repetition keeps the existing raw storage schema simple. Extra packet fields remain in this audit payload but are not emitted as new metrics. Missing metric values are quarantined individually, so a bad SpO2 field does not discard otherwise valid measurements. A malformed non-object packet produces one quarantined delivery.
+## Timestamps and delivery identity
 
-Naive timestamps are invalid by default. `assume_utc=True` explicitly interprets them as UTC and records that assumption in observation context. The mission demo opts into this assumption and validates against a simulation clock. Other input uses the real clock unless the caller explicitly passes an aware `reference_time` for replay.
+Capture time belongs to the sensor. Receive time belongs to storage and always uses the actual UTC clock. Validation compares against the original receive time, or an explicitly stored simulation clock; it does not use a later retry time. Invalid timestamps can be stored raw but cannot enter clean history.
 
-## Step 3 interface
+Naive timestamps are rejected unless the caller explicitly sets `assume_utc=True`; that assumption is recorded in context. The existing synthetic story remains unchanged, and the new capture command explicitly assigns its simulation clock. The noise command interprets the original generator's local timestamps in the machine's local timezone and converts them to aware UTC before storage.
+
+Every new delivery is retained. PocketBase additionally accepts a producer-scoped delivery key so a timed-out capture can be retried without inserting another raw row. That key is different from observation identity: `(astronaut_id, metric, UTC captured_at, source)`. Identical normalized value, unit, and context at that identity is a duplicate; changed content is a conflict. The first accepted record stays in place.
+
+## Storage and retry behavior
+
+Both backends store the packet once, link per-metric outcomes to it, and atomically commit clean observations with the processed marker. SQLite uses `raw_measurements.sensor_packet_id`; PocketBase uses related `validation_results` records. Old local audit rows remain intact with a nullable packet link after migration.
+
+SQLite locks a bounded worker batch. PocketBase commits each packet through a server transaction. Concurrent workers cannot commit the same packet twice. A storage or validation failure rolls back the corresponding transaction, leaving packets pending for retry. A packet containing invalid measurements can still be marked processed: its quarantines and reasons are the completed validation outcome.
+
+`capture` and `process` can run separately. Capturing without the worker proves raw data is already durable. `capture --process` runs them together for a small demo. PocketBase is accessed over its APIs; direct writes into its internal SQLite files are not supported. Local SQLite and PocketBase databases are independent and are not automatically synchronized.
+
+## Step 3 contract
+
+A clean observation has `astronaut_id`, `metric`, `value`, `unit`, `captured_at`, `source`, `context`, and `quality_flags`. History is newest first. Limits count individual metrics, not mission days. Default history is 250 observations, configurable up to 10,000; the assessment owner must choose a suitable window.
+
+For the local Python connection:
 
 ```python
 from ingest_validate import process_sensor_packets
 
-# risk_engine.assess must be implemented by the Step 3 owner.
+# risk_engine.assess is supplied by the Step 3 owner.
 result = process_sensor_packets(
     sensor_packets,
     db_path="data/telemetry.sqlite",
-    assume_utc=True,  # Only if the sensor contract explicitly says UTC.
+    assume_utc=True,  # Only when the source contract explicitly says UTC.
     assess=risk_engine.assess,
 )
 ```
 
-`assess` receives `(astronaut_id, history)` and returns an assessment result owned by Step 3. Each history item contains `astronaut_id`, `metric`, `value`, `unit`, `captured_at`, `source`, `context`, and `quality_flags`. History is newest first and defaults to the latest 250 observations; use `history_limit` to set the observation count needed for the assessment window, up to 10,000. This is a count of individual metrics, not mission days.
+The callback receives `(astronaut_id, history)` once per crew member with newly accepted data. It is not triggered by duplicates or quarantines alone. The callback path and `get_validated_observations` remain compatible with the original Python interface.
 
-The pipeline calls the assessor once per crew member with newly accepted observations. Quarantines, duplicates, and conflicts do not trigger it alone. No assessor means the result includes `step3_history` and `assessment_status: "not_configured"`. This makes the interface demonstrable without inventing risk formulas.
+For shared API storage:
 
-Ingestion commits before assessment. If assessment fails, the clean records remain available through `get_validated_observations`; retry assessment against that history. Replaying an unchanged sensor batch will be treated as duplicates and will not retry the assessor automatically. Durable assessment jobs, result persistence, API transport, and delivery retries are remaining tasks.
+```python
+from ingest_validate.pocketbase import PocketBaseTelemetry
 
-## Storage rules
+store = PocketBaseTelemetry.from_environment()
+history = store.get_history("a", limit=250)
+assessment = risk_engine.assess("a", history)
+```
 
-Identity is `(astronaut_id, metric, UTC captured_at, source)`. An identical normalized value, unit, and context is a duplicate; changed content at the same identity is a conflict. The first accepted record is preserved. Timestamp aliases and supported unit conversions normalize before comparison.
+The commands also export `step3_history` after processing. Without an actual risk engine, they explicitly report `assessment_status: "not_configured"`.
 
-All deliveries retain raw payloads, ingestion status, and error reasons. Non-JSON Python objects retain a diagnostic representation. Clean history excludes quarantined and conflicting records. SQLite serializes writers and stores each finite batch atomically.
-
-The source string is a provenance label, not authentication. Rolling baselines, sensor reliability, missing-data alerts, risk scoring, and real sensor authentication remain separate work items in the [task plan](task-plan.md).
+Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew-specific frontend authorization, missing-data monitoring, and agreed risk formulas remain tasks in the [schedule](task-plan.md). See [PocketBase setup](../backend/pocketbase/README.md) for collection rules and real API tests.
