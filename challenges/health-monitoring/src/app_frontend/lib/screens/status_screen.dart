@@ -8,8 +8,14 @@ class StatusScreen extends StatefulWidget {
 }
 
 class _StatusScreenState extends State<StatusScreen> {
+
   @override
   Widget build(BuildContext context) {
-    return const Placeholder();
+
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+    );
+
   }
+
 }

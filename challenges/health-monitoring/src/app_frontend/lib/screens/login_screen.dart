@@ -1,5 +1,8 @@
 import 'dart:ui';
 
+import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/screens/checkin_screen.dart';
+import 'package:app_frontend/screens/status_screen.dart';
 import 'package:flutter/material.dart';
 
 InputDecoration fieldDecoration(String label) => InputDecoration(
@@ -31,6 +34,13 @@ class _LoginScreenState extends State<LoginScreen> {
   TextEditingController passwordController = TextEditingController();
 
   bool _passwordVisible = false;
+
+  @override
+  void dispose() {
+    super.dispose();
+    usernameController.dispose();
+    passwordController.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,8 +150,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 120,
                             height: 60,
                             child: FilledButton(
-                              onPressed: () {
-                                
+                              onPressed: () async {
+                                final success = await CurrentUser.instance.loginUser(usernameController.text, passwordController.text);
+
+                                if (!context.mounted) return;
+
+                                if (success) {
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => CheckinScreen())
+                                  );
+                                }
                               },
                             
                               child: Text(

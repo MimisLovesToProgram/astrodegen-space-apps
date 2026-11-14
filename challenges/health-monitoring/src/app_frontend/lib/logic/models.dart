@@ -1,5 +1,7 @@
 library;
 
+import 'package:http/http.dart';
+
 enum QuestionType {num, onetofive, yesno}
 
 class Question {
@@ -17,4 +19,21 @@ class Question {
   /// For yesno, 1 for yes, 0 for no.
   /// Null means yet unanswered.
   int? answer;
+  int? defaultAns;
+}
+
+/// Singleton class for the current user
+class CurrentUser {
+  CurrentUser._();
+
+  static CurrentUser instance = CurrentUser._();
+
+  late String crewId;
+
+  Future<bool> loginUser(String username, String password) async {
+    // TODO: For now just give a random one
+    crewId = "a";
+
+    return true; // for success
+  }
 }
