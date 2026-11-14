@@ -1,27 +1,32 @@
-# ASTRODEGEN — Space Apps
+# Astrocrates
 
-Team workspace for NASA Space Apps Challenge preparation, challenge exploration, and prototypes.
+An astronaut health-monitoring prototype by ASTRODEGEN for Space Apps preparation. Synthetic sensor packets are captured before validation, stored in SQLite, and exposed as clean history for assessment. The Flutter interface is an existing prototype. Health-risk calculations are still pending.
 
-## Structure
+## Project layout
 
 ```text
-challenges/
-  health-monitoring/   # ASTRA: sensor simulator, ingestion, and Flutter prototype
-ideas/                # Alternative challenge ideas and comparisons
-shared/               # Resources used by multiple challenges
-docs/                 # Team workflow and project decisions
+frontend/                Existing Flutter app, assets, and platform projects
+src/
+  biosensors.py          Existing synthetic sensor scenarios
+  ingest_validate/       Capture, validation, storage, worker, and assessment hook
+tests/                   Python behavior and integration tests
+docs/                    Architecture, decisions, team workflow, and task schedule
 ```
 
-Our current focus is **ASTRA — astronaut health monitoring**. This is a preliminary project idea; an official challenge statement and requirements have not yet been recorded here.
+Keep features inside these folders rather than adding empty folders for planned components. `data/` is generated locally and ignored by Git.
 
-## Adding or changing a challenge
+## Run the connected demo
 
-Create a new folder at `challenges/<challenge-name>/` with its own README, source, documentation, and tests as needed. Keep existing challenge folders so their work remains available. Record the selected challenge and the reason for switching in `docs/decisions.md`, and update the current focus above.
+From the repository root:
 
-Use `ideas/README.md` to compare options before starting another prototype.
+```bash
+PYTHONPATH=src python3 -m ingest_validate.cli --sensor-demo
+PYTHONPATH=src python3 -m ingest_validate.cli --latest a --limit 250
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
 
-## Team collaboration
+A fresh synthetic mission produces 21 raw packets and 252 accepted observations. A repeat records retransmissions and detects duplicate observations. The demo uses an explicit simulation clock for its future-dated story. All sensor examples are synthetic.
 
-See [the team workflow](docs/team-workflow.md). Team members need repository access before they can push branches. Use branches and pull requests for implementation work.
+For the existing frontend, run Flutter commands from `frontend/`. No frontend source or application identifiers have been changed during the folder reorganization.
 
-The health-monitoring prototype contains a synthetic sensor generator, a tested Python ingestion and validation pipeline with SQLite storage, and a Flutter interface prototype. Health-risk assessment is still pending. See the [challenge guide](challenges/health-monitoring/README.md) for commands and the [non-UI task schedule](challenges/health-monitoring/docs/task-plan.md) for remaining work.
+See the [pipeline contract](docs/pipeline.md), [non-UI task schedule](docs/task-plan.md), and [team workflow](docs/team-workflow.md). Data-quality bounds and the prototype are not clinically validated.

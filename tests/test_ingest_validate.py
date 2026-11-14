@@ -1,4 +1,4 @@
-"""Run with PYTHONPATH=challenges/health-monitoring/src python3 -m unittest discover -s challenges/health-monitoring/tests -v."""
+"""Run with PYTHONPATH=src python3 -m unittest discover -s tests -v."""
 
 import unittest
 import sqlite3

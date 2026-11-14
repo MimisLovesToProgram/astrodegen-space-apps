@@ -1,6 +1,6 @@
 """Run from the repository root with:
 
-PYTHONPATH=challenges/health-monitoring/src python3 -m ingest_validate.cli --demo
+PYTHONPATH=src python3 -m ingest_validate.cli --demo
 
 Use --input telemetry.json for a JSON array from Step 1, or --latest crew_01
 for Step 3-ready history. The demo is synthetic and has stable identities so
