@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 
-from .service import ingest_batch
 
 
 # Sensor field -> Step 2 metric and canonical unit.
@@ -26,7 +25,7 @@ def sensor_observations(packets, *, assume_utc=False):
     """Expand full biosensors packets; missing fields are quarantined downstream.
 
     This adapter is for the synthetic biosensors.py schema, not real sensors.
-    Original packets are retained on each raw observation for inspection.
+    Original packets are retained once in the durable sensor inbox.
     Naive timestamps stay invalid unless the caller explicitly assumes UTC.
     """
     if isinstance(packets, (str, bytes, dict)):
@@ -50,13 +49,21 @@ def sensor_observations(packets, *, assume_utc=False):
                 "astronaut_id": packet.get("crew_id"), "metric": metric,
                 "value": packet.get(field), "unit": unit,
                 "captured_at": timestamp, "source": "synthetic_biosensors",
-                "context": context, "sensor_packet": packet,
+                "context": context,
             }
 
 
 def ingest_sensor_packets(packets, db_path="data/telemetry.sqlite", *, assume_utc=False, reference_time=None):
-    """Run Step 1 packets through the same atomic Step 2 storage path."""
-    return ingest_batch(
-        sensor_observations(packets, assume_utc=assume_utc),
-        db_path=db_path, reference_time=reference_time,
+    """Capture first, then validate only this call's packets in bounded batches."""
+    from .capture import capture_sensor_packets
+    from .worker import validate_pending_packets
+
+    packet_ids = capture_sensor_packets(
+        packets, db_path, assume_utc=assume_utc, reference_time=reference_time,
     )
+    summary = {"accepted": [], "quarantined": [], "duplicates": [], "conflicts": []}
+    for offset in range(0, len(packet_ids), 100):
+        result = validate_pending_packets(db_path, packet_ids=packet_ids[offset:offset + 100])
+        for key in summary:
+            summary[key].extend(result["ingestion"][key])
+    return summary

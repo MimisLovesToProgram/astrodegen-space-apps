@@ -31,57 +31,60 @@ def ingest_batch(measurements, db_path="data/telemetry.sqlite", reference_time=N
         raise TypeError("measurements must be an iterable of observation objects")
     now = reference_time if reference_time is not None else datetime.now(timezone.utc)
     received_at = utc_string(now)
-    summary = {"accepted": [], "quarantined": [], "duplicates": [], "conflicts": []}
-
     with closing(connect_database(db_path)) as connection:
         with connection:
-            # Serialize writers before checking identities to prevent races.
             connection.execute("BEGIN IMMEDIATE")
-            for raw in measurements:
-                result = validate_observation(raw, reference_time=now)
-                status, errors = result["status"], result["errors"]
-                observation = result["observation"]
-                if observation is not None:
-                    identity = tuple(observation[key] for key in (
-                        "astronaut_id", "metric", "captured_at", "source"
-                    ))
-                    content = (
-                        observation["unit"], json_string(observation["value"]),
-                        json_string(observation["context"]),
-                    )
-                    existing = connection.execute(
-                        """SELECT unit, value_json, context_json
-                           FROM validated_observations
-                           WHERE astronaut_id=? AND metric=? AND captured_at=? AND source=?""",
-                        identity,
-                    ).fetchone()
-                    if existing is not None:
-                        status = "duplicate" if existing == content else "conflict"
-                        if status == "conflict":
-                            errors = ["A different measurement already exists at this identity"]
+            return _ingest_on_connection(connection, measurements, received_at=received_at, reference_time=now)
 
-                payload, encoding = _raw_payload(raw)
-                cursor = connection.execute(
-                    """INSERT INTO raw_measurements
-                       (received_at, payload, payload_encoding, status, errors_json)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (received_at, payload, encoding, status, json_string(errors)),
-                )
-                raw_id = cursor.lastrowid
-                if status == "accepted":
-                    connection.execute(
-                        """INSERT INTO validated_observations
-                           (raw_id, astronaut_id, metric, captured_at, source,
-                            unit, value_json, context_json, quality_flags_json)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (raw_id, *identity, *content, json_string(observation["quality_flags"])),
-                    )
-                    summary["accepted"].append(observation)
-                else:
-                    bucket = {"quarantined": "quarantined", "duplicate": "duplicates", "conflict": "conflicts"}[status]
-                    summary[bucket].append({
-                        "raw_id": raw_id, "errors": errors, "observation": observation,
-                    })
+
+def _ingest_on_connection(connection, measurements, *, received_at, reference_time, sensor_packet_id=None):
+    """Write with the caller's transaction, including its packet status change."""
+    summary = {"accepted": [], "quarantined": [], "duplicates": [], "conflicts": []}
+    for raw in measurements:
+        result = validate_observation(raw, reference_time=reference_time)
+        status, errors = result["status"], result["errors"]
+        observation = result["observation"]
+        if observation is not None:
+            identity = tuple(observation[key] for key in (
+                "astronaut_id", "metric", "captured_at", "source"
+            ))
+            content = (
+                observation["unit"], json_string(observation["value"]),
+                json_string(observation["context"]),
+            )
+            existing = connection.execute(
+                """SELECT unit, value_json, context_json
+                   FROM validated_observations
+                   WHERE astronaut_id=? AND metric=? AND captured_at=? AND source=?""",
+                identity,
+            ).fetchone()
+            if existing is not None:
+                status = "duplicate" if existing == content else "conflict"
+                if status == "conflict":
+                    errors = ["A different measurement already exists at this identity"]
+
+        payload, encoding = _raw_payload(raw)
+        cursor = connection.execute(
+            """INSERT INTO raw_measurements
+               (received_at, payload, payload_encoding, status, errors_json, sensor_packet_id)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (received_at, payload, encoding, status, json_string(errors), sensor_packet_id),
+        )
+        raw_id = cursor.lastrowid
+        if status == "accepted":
+            connection.execute(
+                """INSERT INTO validated_observations
+                   (raw_id, astronaut_id, metric, captured_at, source,
+                    unit, value_json, context_json, quality_flags_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (raw_id, *identity, *content, json_string(observation["quality_flags"])),
+            )
+            summary["accepted"].append(observation)
+        else:
+            bucket = {"quarantined": "quarantined", "duplicate": "duplicates", "conflict": "conflicts"}[status]
+            summary[bucket].append({
+                "raw_id": raw_id, "errors": errors, "observation": observation,
+            })
     return summary
 
 

@@ -56,8 +56,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len(result["ingestion"]["quarantined"]), 1)
         self.assertNotIn("spo2", {item["metric"] for item in calls[0]})
         with sqlite3.connect(self.db) as connection:
-            payload = connection.execute("SELECT payload FROM raw_measurements LIMIT 1").fetchone()[0]
-        self.assertEqual(json.loads(payload)["sensor_packet"], self.packet)
+            payload = connection.execute("SELECT payload FROM sensor_packets LIMIT 1").fetchone()[0]
+        self.assertEqual(json.loads(payload), self.packet)
 
     def test_missing_and_invalid_fields_are_quarantined(self):
         del self.packet["hr"]
