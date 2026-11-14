@@ -154,6 +154,20 @@ class PocketBaseTests(unittest.TestCase):
         self.assertEqual(output["counts"]["accepted"], 252)
         self.assertEqual(len(self.clients["reader"].get_history("a")), 84)
 
+    def test_quality_summary_counts_outcomes_and_restricts_access(self):
+        # One bad field must affect the source acceptance rate without
+        # preventing the other eleven metrics from reaching clean history.
+        self.packet["spo2"] = 140
+        self.capture()
+        self.worker.process_pending()
+        summary = self.worker.get_audit_summary()
+        self.assertEqual(summary["packets"], {"pending": 0, "processed": 1})
+        counts = {row["status"]: row["total"] for row in summary["results"]}
+        self.assertEqual(counts, {"accepted": 11, "quarantined": 1})
+        with self.assertRaises(PocketBaseError) as error:
+            self.clients["reader"].get_audit_summary()
+        self.assertEqual(error.exception.status, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

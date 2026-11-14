@@ -1,7 +1,6 @@
 """PocketBase HTTP adapter; never opens or edits PocketBase's SQLite files."""
 
 import json
-import os
 import uuid
 from datetime import datetime
 from urllib.error import HTTPError, URLError
@@ -9,6 +8,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from .adapters import sensor_observations
+from .config import connection_settings
 from .service import _raw_payload
 from .validation import json_string, utc_string, validate_observation
 
@@ -56,11 +56,12 @@ class PocketBaseTelemetry:
         return response["record"]
 
     @classmethod
-    def from_environment(cls):
-        client = cls(os.environ.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
-                     os.environ.get("POCKETBASE_TOKEN"))
+    def from_environment(cls, env_file=None):
+        settings = connection_settings(env_file)
+        client = cls(settings.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
+                     settings.get("POCKETBASE_TOKEN"))
         if not client.token:
-            email, password = os.environ.get("POCKETBASE_EMAIL"), os.environ.get("POCKETBASE_PASSWORD")
+            email, password = settings.get("POCKETBASE_EMAIL"), settings.get("POCKETBASE_PASSWORD")
             if not email or not password:
                 raise ValueError("Set POCKETBASE_TOKEN or POCKETBASE_EMAIL and POCKETBASE_PASSWORD")
             client.authenticate(email, password)
@@ -141,3 +142,7 @@ class PocketBaseTelemetry:
                 break
             page += 1
         return history[:limit]
+
+    def get_audit_summary(self):
+        """Read worker-only aggregate counts without downloading raw packets."""
+        return self.request("GET", "/api/astrocrates/quality-summary")

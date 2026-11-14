@@ -38,6 +38,13 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(len(history), 84)
             replay = run("capture", "--interval", "0", "--process")
             self.assertEqual(sum(item["counts"]["duplicates"] for item in replay), 252)
+            quality = json.loads(subprocess.check_output([
+                *base, "quality", "a", "--max-age-seconds", "86400", "--reference-time", "2026-11-22T00:00:00Z",
+            ], env=env, cwd=root))
+            self.assertEqual(quality["missing_metrics"], [])
+            self.assertEqual(quality["stale_metrics"], [])
+            self.assertEqual(quality["fresh_metric_fraction"], 1)
+            self.assertEqual(quality["audit"]["sources"]["synthetic_biosensors"]["duplicate"], 252)
 
     def test_noise_packets_use_aware_utc(self):
         packets, clock, assumed = next(sensor_batches("noise", ticks=1))

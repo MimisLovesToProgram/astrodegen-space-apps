@@ -27,6 +27,21 @@ class LocalTelemetry:
         from ingest_validate.service import get_validated_observations
         return get_validated_observations(self.db_path, astronaut_id, limit)
 
+    def get_audit_summary(self):
+        from contextlib import closing
+        from ingest_validate.storage import connect_database
+        with closing(connect_database(self.db_path)) as connection:
+            # Sensor-linked rows use the original packet's source. Canonical
+            # inputs outside the adapter retain their own source label.
+            rows = connection.execute("""SELECT
+                COALESCE(p.source, CASE WHEN r.payload_encoding='json' AND json_valid(r.payload)
+                  THEN json_extract(r.payload, '$.source') END, 'unknown') AS source,
+                r.status, count(*) FROM raw_measurements r
+                LEFT JOIN sensor_packets p ON p.id=r.sensor_packet_id GROUP BY 1, 2""").fetchall()
+            packets = dict(connection.execute("SELECT status,count(*) FROM sensor_packets GROUP BY status").fetchall())
+        return {"packets": {"pending": packets.get("pending", 0), "processed": packets.get("processed", 0)},
+                "results": [{"source": row[0], "status": row[1], "total": row[2]} for row in rows]}
+
 
 def sensor_batches(mode="story", ticks=None):
     """Yield one bounded crew tick, its validation clock, and UTC assumption.
@@ -73,6 +88,7 @@ def main():
     parser = argparse.ArgumentParser(description="Astrocrates sensor and validation pipeline")
     parser.add_argument("--backend", choices=("pocketbase", "sqlite"), default="pocketbase")
     parser.add_argument("--db", default="data/telemetry.sqlite", help="SQLite development database")
+    parser.add_argument("--env-file", help="PocketBase settings file; default is .env in the current directory")
     actions = parser.add_subparsers(dest="action", required=True)
     capture = actions.add_parser("capture", help="Step 1: save original timestamped packets before validation")
     capture.add_argument("--mode", choices=("story", "noise"), default="story")
@@ -86,14 +102,28 @@ def main():
     history = actions.add_parser("history", help="Read validated observations for Step 3")
     history.add_argument("astronaut_id")
     history.add_argument("--limit", type=int, default=250)
+    quality = actions.add_parser("quality", help="Report missing/stale measurements and data acceptance rates")
+    quality.add_argument("astronaut_id")
+    quality.add_argument("--max-age-seconds", type=float, required=True)
+    quality.add_argument("--reference-time", help="Explicit aware timestamp for a synthetic replay")
+    quality.add_argument("--history-limit", type=int, default=10000)
+    quality.add_argument("--metrics", nargs="+", help="Expected metric names; default is the full simulator schema")
+    actions.add_parser("contract", help="Show the versioned Step 1/2/3 data contract")
+    handoff = actions.add_parser("handoff", help="Export versioned clean history for Step 3")
+    handoff.add_argument("astronaut_id")
+    handoff.add_argument("--limit", type=int, default=250)
     args = parser.parse_args()
     if hasattr(args, "interval") and (not math.isfinite(args.interval) or args.interval < 0):
         parser.error("--interval must be finite and nonnegative")
     if args.action == "process" and args.watch and args.interval == 0:
         parser.error("--watch requires a positive --interval")
+    if args.action == "contract":
+        from ingest_validate.contract import observation_contract
+        print(json.dumps(observation_contract(), indent=2, allow_nan=False))
+        return
     if args.backend == "pocketbase":
         from ingest_validate.pocketbase import PocketBaseTelemetry
-        store = PocketBaseTelemetry.from_environment()
+        store = PocketBaseTelemetry.from_environment(args.env_file)
     else:
         store = LocalTelemetry(args.db)
     try:
@@ -115,6 +145,18 @@ def main():
                 if not args.watch:
                     break
                 time.sleep(args.interval)
+        elif args.action == "quality":
+            from ingest_validate.quality import quality_report, summarize_audit
+            reference = datetime.fromisoformat(args.reference_time.replace("Z", "+00:00")) if args.reference_time else None
+            output = quality_report(store.get_history(args.astronaut_id, args.history_limit), args.astronaut_id,
+                                    max_age_seconds=args.max_age_seconds, reference_time=reference,
+                                    expected_metrics=args.metrics, history_limit=args.history_limit)
+            output["audit"] = summarize_audit(store.get_audit_summary())
+            print(json.dumps(output, indent=2, allow_nan=False))
+        elif args.action == "handoff":
+            from ingest_validate.contract import history_handoff
+            observations = store.get_history(args.astronaut_id, args.limit)
+            print(json.dumps(history_handoff(args.astronaut_id, observations, args.limit), indent=2, allow_nan=False))
         else:
             print(json.dumps(store.get_history(args.astronaut_id, args.limit), indent=2, allow_nan=False))
     except KeyboardInterrupt:
