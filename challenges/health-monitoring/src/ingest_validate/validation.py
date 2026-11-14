@@ -74,7 +74,12 @@ def validate_observation(raw, reference_time=None):
 
     metric, unit, value = raw["metric"], raw["unit"], raw["value"]
     flags = []
-    if metric in BOOLEAN_METRICS:
+    if metric == "symptoms":
+        if unit != "list" or not isinstance(value, list) or any(
+            not isinstance(item, str) or not item.strip() for item in value
+        ):
+            return reject("symptoms requires a list of nonempty strings and unit 'list'")
+    elif metric in BOOLEAN_METRICS:
         if unit != "bool" or not isinstance(value, bool):
             return reject(f"{metric} requires a boolean value and unit 'bool'")
     elif metric in NUMERIC_RULES:
