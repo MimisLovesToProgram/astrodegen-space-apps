@@ -1,5 +1,9 @@
 # Team workflow
 
+## Project language
+
+Write documentation, interface text, code comments, commit messages, and pull request descriptions in English. Use clear, natural language, as if explaining the work to another team member. Keep explanations practical and describe what has actually been built. The repository's `AGENTS.md` records the same guidance for coding assistants.
+
 ## Repository access
 
 The repository owner can invite members through GitHub repository Settings → Collaborators. Team members must accept their invitations before pushing changes.
