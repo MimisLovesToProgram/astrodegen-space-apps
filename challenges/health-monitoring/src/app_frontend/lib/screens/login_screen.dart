@@ -80,20 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       
                           // User icon
                           Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(50),
-                              border: Border.all(color: Colors.black, width: 1.5),
-                              color: Colors.lightBlue,
-                            ),
-                      
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.white,
-                              ),
-                            ),
+                            width: 200,
+                            height: 200,
+                            child: Image.asset(
+                              "assets/logo.png",
+                              fit: BoxFit.fill,
+                            )
                           ),
                       
                           SizedBox(height: 20),
@@ -179,6 +171,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+
+                          // To push the rest of the UI up
+                          SizedBox(height: 70),
                       
                         ],
                       ),
