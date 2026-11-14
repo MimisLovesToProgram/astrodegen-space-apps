@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ingest_validate.setup import setup_local
 
@@ -48,3 +49,17 @@ class SetupTests(unittest.TestCase):
                 setup_local(binary=os.environ["POCKETBASE_TEST_BINARY"], data_dir=Path(directory) / "pb_data",
                             env_dir=directory, port=listener.getsockname()[1])
             self.assertFalse((Path(directory) / ".env").exists())
+
+    def test_failed_commands_do_not_expose_credentials(self):
+        with tempfile.TemporaryDirectory() as directory, socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+            probe.close()
+            # An underlying command exception can contain password arguments;
+            # the setup interface must replace it with a credential-free error.
+            failure = subprocess.CalledProcessError(1, ["pocketbase", "private-test-password"])
+            with patch("ingest_validate.setup.subprocess.run", side_effect=failure):
+                with self.assertRaises(RuntimeError) as error:
+                    setup_local(binary=os.environ["POCKETBASE_TEST_BINARY"],
+                                data_dir=Path(directory) / "pb_data", env_dir=directory, port=port)
+            self.assertNotIn("private-test-password", str(error.exception))

@@ -134,6 +134,10 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
             # least-privilege service accounts can authenticate independently.
             created_admin = False
             completed = True
+        except subprocess.CalledProcessError:
+            # subprocess exceptions include command arguments, which may hold
+            # temporary credentials. Expose only the private log location.
+            raise RuntimeError(f"PocketBase setup command failed; inspect {log_path}") from None
         finally:
             if process is not None and (not completed or not keep_running):
                 process.terminate()
