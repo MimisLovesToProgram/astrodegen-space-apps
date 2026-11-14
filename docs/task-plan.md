@@ -41,3 +41,18 @@ The repository includes automated validation/storage tests and integration tests
 ## Folder and backend checkpoint
 
 The project now uses a single Astrocrates layout: `frontend/`, `src/`, `backend/pocketbase/`, `tests/`, and `docs/`. Step 1 saves timestamped packets before validation. Step 2 uses bounded, recoverable processing with atomic results and completion markers. Shared PocketBase APIs and offline SQLite use the same clean observation contract. The original simulator and Flutter source are preserved. Risk calculations and UI integration are still pending.
+
+## Step 2 handoff checklist
+
+The Step 2 implementation is complete for the synthetic prototype. Validation, unit conversion, raw capture, clean storage, duplicate/conflict handling, recovery, APIs, and the Step 3 data interface are implemented. All 37 tests pass with the installed PocketBase v0.42.2.
+
+The remaining work for the Step 2 owner is:
+
+- [ ] Confirm the sensor contract with the Step 1 owner: resting HR, HRV method, units, source identifiers, timestamp policy, and sampling frequency (T03).
+- [ ] Start PocketBase from `backend/pocketbase/` so the committed migrations are applied to the actual local database.
+- [ ] Configure ingest/worker/reader service accounts and environment settings for the local demo.
+- [ ] Run capture -> process -> history on the actual local backend and check the records in its dashboard; existing integration tests use temporary databases.
+- [ ] Agree the history window and hand off the normalized observation contract to the Step 3 owner (T08).
+- [ ] Connect the real assessment engine when T09 is available, then verify failure and retry behavior (T10/T11/T13).
+
+Missing/stale-data monitoring, sensor reliability scoring, and quality summaries (T12) are additional work. Risk formulas, baseline assessment calculations, and persistent risk results are not implemented and belong to Step 3. The existing UI is outside this owner's implementation scope; live UI/backend integration is still pending.

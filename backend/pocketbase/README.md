@@ -1,10 +1,10 @@
 # PocketBase backend
 
-PocketBase owns its database and exposes the record APIs used by Astrocrates. Python communicates over HTTP; it never writes into `pb_data`. The migrations and hooks are tested against the official **PocketBase v0.40.6** Linux binary. Keep that version for a reproducible demo; test migrations before upgrading.
+PocketBase owns its database and exposes the record APIs used by Astrocrates. Python communicates over HTTP; it never writes into `pb_data`. The migrations and hooks are tested against the official **PocketBase v0.42.2** Linux binary. Keep that version for a reproducible demo; test migrations before upgrading.
 
 ## Start locally
 
-1. Download the matching executable from the [official release](https://github.com/pocketbase/pocketbase/releases/tag/v0.40.6), verify its published checksum, and put the executable in this folder. Runtime binaries are ignored by Git.
+1. Download the matching executable from the [official downloads](https://pocketbase.io/docs/), verify its published checksum, and put the executable in this folder. Runtime binaries are ignored by Git.
 2. From this folder run `./pocketbase serve --http=127.0.0.1:8090`. The committed migration creates the telemetry collections automatically. Use the installer link printed by PocketBase to create your local administrator account.
 3. In the dashboard, create a record in the `telemetry_services` auth collection with an email, password, and role `worker`. This account can capture and validate synthetic telemetry for the demo. There are no default application credentials.
 4. In a terminal at the repository root, configure the Python client:
@@ -68,3 +68,9 @@ POCKETBASE_TEST_BINARY="$PWD/backend/pocketbase/pocketbase" \
 Tests launch an isolated server and database in a temporary directory, use generated test credentials, and stop the server afterward. They cover the complete mission, permissions, retries, conflict detection, rollback, and concurrent workers. No application accounts are created on your running backend.
 
 Implementation references: [records APIs](https://pocketbase.io/docs/api-records/), [collections](https://pocketbase.io/docs/collections/), [migrations](https://pocketbase.io/docs/js-migrations/), and [transactions](https://pocketbase.io/docs/js-database/).
+
+## Current local workspace
+
+Use `/home/evantampa129/astrodegen-space-apps` as the single active project directory. The local executable and the existing database were consolidated into this folder from an older clone. Its original contents are preserved in the ignored `data/backups/project-copy-before-consolidation.tar.gz` archive at the project root. Downloaded installation files remain in Downloads.
+
+All 37 tests passed against the installed v0.42.2 executable using temporary data. The existing local database has not yet had the Astrocrates application migration applied, and its running service and application accounts still need setup. Test success does not mean the local demo server is already configured.
