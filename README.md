@@ -1,27 +1,35 @@
-# ASTRODEGEN — Space Apps
+# Astrocrates
 
-Team workspace for NASA Space Apps Challenge preparation, challenge exploration, and prototypes.
+An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is saved, validated, and prepared for health assessment. The risk engine is still pending.
 
 ## Structure
 
 ```text
-challenges/
-  health-monitoring/   # ASTRA: initial astronaut health monitoring concept
-ideas/                # Alternative challenge ideas and comparisons
-shared/               # Resources used by multiple challenges
-docs/                 # Team workflow and project decisions
+src/
+  app_frontend/   Flutter app
+  ingest_validate/ Data pipeline
+  biosensors.py   Synthetic sensors
+  astrocrates.py  Pipeline commands
+backend/    PocketBase configuration and APIs
+tests/      Python and backend tests
+docs/       Architecture and task schedule
 ```
 
-Our current focus is **ASTRA — astronaut health monitoring**. This is a preliminary project idea; an official challenge statement and requirements have not yet been recorded here.
+## Run locally
 
-## Adding or changing a challenge
+From the repository root, using Python's standard library and SQLite:
 
-Create a new folder at `challenges/<challenge-name>/` with its own README, source, documentation, and tests as needed. Keep existing challenge folders so their work remains available. Record the selected challenge and the reason for switching in `docs/decisions.md`, and update the current focus above.
+```bash
+PYTHONPATH=src python3 -m astrocrates --backend sqlite capture --interval 0 --process
+PYTHONPATH=src python3 -m astrocrates --backend sqlite history a
+```
 
-Use `ideas/README.md` to compare options before starting another prototype.
+For the shared API backend, follow the [PocketBase setup](backend/pocketbase/README.md).
 
-## Team collaboration
+## Tests
 
-See [the team workflow](docs/team-workflow.md). Team members need repository access before they can push branches. Use branches and pull requests for implementation work.
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
 
-This repository currently contains planning documents and empty source/test directories. No application has been implemented yet.
+See the [pipeline guide](docs/pipeline.md) and [non-UI task schedule](docs/task-plan.md).

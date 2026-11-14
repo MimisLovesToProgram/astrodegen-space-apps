@@ -1,23 +1,9 @@
 # Team workflow
 
-## Project language
+Use English for project documentation, comments, interface text, and commits. Describe implemented behavior separately from planned work.
 
-Write documentation, interface text, code comments, commit messages, and pull request descriptions in English. Use clear, natural language, as if explaining the work to another team member. Keep explanations practical and describe what has actually been built. The repository's `AGENTS.md` records the same guidance for coding assistants.
+Create a feature branch from an up-to-date `main`, keep each commit focused, and open a pull request when the work is ready for review. Suggested branch names are `sensors/<task>`, `ingestion/<task>`, `assessment/<task>`, `frontend/<task>`, and `docs/<task>`.
 
-## Repository access
+Keep the Flutter application in `src/app_frontend/`, Python code in `src/`, backend configuration in `backend/`, tests in `tests/`, and architecture and plans in `docs/`. Create new folders only when there is content for them. Keep generated databases, runtime binaries, credentials, and private data out of Git. Document external data sources and usage rights alongside the relevant work.
 
-The repository owner can invite members through GitHub repository Settings → Collaborators. Team members must accept their invitations before pushing changes.
-
-## Working on a change
-
-1. Update your local `main`: `git switch main` followed by `git pull --ff-only`.
-2. Create a branch, for example `git switch -c health-monitoring/initial-design`.
-3. Keep changes in the relevant challenge folder. Put common resources in `shared/` only when multiple challenges use them.
-4. Commit and push your branch, then open a pull request targeting `main`.
-5. Ask another member to review the change before merging. Run relevant checks once code and tests exist.
-
-Suggested branch names: `health-monitoring/<task>`, `<other-challenge>/<task>`, and `docs/<topic>`.
-
-## Switching challenges
-
-Add a new folder under `challenges/`, update the root README, and record the reason in `docs/decisions.md`. Keep earlier work available for reference.
+Run `PYTHONPATH=src python3 -m unittest discover -s tests -v` for Python changes. Use the existing Flutter checks for frontend changes. Team members must accept repository invitations before pushing branches.
