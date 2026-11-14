@@ -27,10 +27,3 @@ build/
 # Local telemetry output (raw and validated records)
 /data/
 
-# PocketBase runtime files; migrations and hooks remain versioned
-/backend/pocketbase/pb_data/
-/backend/pocketbase/pocketbase
-/backend/pocketbase/pocketbase.exe
-
-# Local PocketBase distribution notes
-/backend/pocketbase/POCKETBASE_*.md
