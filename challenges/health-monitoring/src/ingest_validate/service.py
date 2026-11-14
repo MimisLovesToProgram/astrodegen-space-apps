@@ -1,54 +1,12 @@
 """Persist raw deliveries and expose validated observations to Step 3."""
 
 import json
-import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
-from pathlib import Path
 
+from .storage import connect_database
 from .validation import json_string, utc_string, validate_observation
 
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS raw_measurements (
-    id INTEGER PRIMARY KEY,
-    received_at TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    payload_encoding TEXT NOT NULL,
-    status TEXT NOT NULL,
-    errors_json TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS validated_observations (
-    id INTEGER PRIMARY KEY,
-    raw_id INTEGER NOT NULL REFERENCES raw_measurements(id),
-    astronaut_id TEXT NOT NULL,
-    metric TEXT NOT NULL,
-    captured_at TEXT NOT NULL,
-    source TEXT NOT NULL,
-    unit TEXT NOT NULL,
-    value_json TEXT NOT NULL,
-    context_json TEXT NOT NULL,
-    quality_flags_json TEXT NOT NULL,
-    UNIQUE (astronaut_id, metric, captured_at, source)
-);
-CREATE INDEX IF NOT EXISTS observations_history
-ON validated_observations (astronaut_id, captured_at DESC, id DESC);
-"""
-
-
-def connect_database(db_path):
-    """Open a file-backed database and initialize its tables if necessary."""
-    if str(db_path) == ":memory:":
-        raise ValueError("Use a file path so ingestion and history share persistent data")
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(db_path), timeout=30)
-    try:
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.executescript(SCHEMA)
-    except Exception:
-        connection.close()
-        raise
-    return connection
 
 
 def _raw_payload(raw):
