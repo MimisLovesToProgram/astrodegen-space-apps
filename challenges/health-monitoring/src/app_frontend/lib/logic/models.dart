@@ -31,7 +31,9 @@ class CurrentUser {
   late String crewId;
 
   Future<bool> loginUser(String username, String password) async {
-    // TODO: For now just give a random one
+    // TODO: For now just give a random one. Simulate a wait
+    await Future.delayed(Duration(seconds: 5));
+
     crewId = "a";
 
     return true; // for success

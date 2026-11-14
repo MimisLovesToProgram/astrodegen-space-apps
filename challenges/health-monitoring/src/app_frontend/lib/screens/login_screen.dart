@@ -35,6 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _passwordVisible = false;
 
+  bool loggingIn = false;
+
   @override
   void dispose() {
     super.dispose();
@@ -151,7 +153,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 60,
                             child: FilledButton(
                               onPressed: () async {
+                                setState(() {
+                                  loggingIn = true;
+                                });
+
                                 final success = await CurrentUser.instance.loginUser(usernameController.text, passwordController.text);
+
+                                setState(() {
+                                  loggingIn = false;
+                                });
 
                                 if (!context.mounted) return;
 
@@ -178,6 +188,40 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+
+
+          // Waiting for authentication
+          if (loggingIn)
+            Positioned.fill(
+              child: Container(
+                color: const Color.fromARGB(150, 0, 0, 0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+
+                      Text(
+                        "Waiting for authentication",
+                        style: TextStyle(fontSize: 26, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      SizedBox(height: 15),
+
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 6,
+                        )
+                      )
+
+                    ],
+                  ),
+                )
+              )
+            ),
 
         ],
       )

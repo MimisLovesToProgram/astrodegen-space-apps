@@ -21,6 +21,6 @@ class AppData extends ChangeNotifier {
   Map<String, dynamic> sensorData = {};
 
   Future<void> loadSensorData(String crewId) async {
-    
+    await Future.delayed(Duration(seconds: 4));
   }
 }
