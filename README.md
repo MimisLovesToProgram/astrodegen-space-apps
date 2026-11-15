@@ -1,43 +1,26 @@
 # Astrocrates
 
-> \[!WARNING]
-> Pliz push to to `dev` branch NOT MAIN!!!!!!!!
-> even better Branch off dev , add your feature in a feature branch `feature/<MyFeature>` and
-> then merge back to dev... just so we dont have many conflicts
+An astronaut health-monitoring prototype by ASTRODEGEN. We capture and validate sensor data, run configurable assessments, and display crew history in Flutter. Scoring uses team prototype rules with provisional color bands.
 
-
-
-
-An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is saved, validated, and prepared for health assessment. The risk engine is still pending.
-
-## Structure
+Work on a feature branch and open a pull request to `dev`.
 
 ```text
 src/
-  app_frontend/   Flutter app
-  ingest_validate/ Data pipeline
-  biosensors.py   Synthetic sensors
-  astrocrates.py  Pipeline commands
-backend/    PocketBase configuration and APIs
-tests/      Python and backend tests
-docs/       Architecture and task schedule
+  app_frontend/     Flutter app and frontend tests
+  assessment/       Rules, time windows, scoring, and jobs
+  ingest_validate/  Capture, validation, storage, and monitoring
+  biosensors.py     Synthetic sensors
+  astrocrates.py    Pipeline commands
+backend/            PocketBase hooks and migrations
+config/             Explicit assessment policies
+tests/              Python and PocketBase tests
+docs/               Setup, contracts, and task board
 ```
 
-## Run locally
-
-From the repository root, using Python's standard library and SQLite:
+For local setup and commands, see the [backend guide](backend/README.md) and [frontend guide](src/app_frontend/README.md).
 
 ```bash
-PYTHONPATH=src python3 -m astrocrates --backend sqlite capture --interval 0 --process
-PYTHONPATH=src python3 -m astrocrates --backend sqlite history a
+POCKETBASE_TEST_BINARY="$PWD/backend/pocketbase" PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-For the shared API backend, follow the [PocketBase setup](backend/pocketbase/README.md).
-
-## Tests
-
-```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-```
-
-See the [pipeline guide](docs/pipeline.md) and [non-UI task schedule](docs/task-plan.md).
+See the [task board](docs/task-plan.md), [assessment guide](docs/assessment.md), and [API contract](docs/frontend-api.md).

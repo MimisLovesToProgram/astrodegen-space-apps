@@ -1,3 +1,7 @@
 pocketbase
 CHANGELOG.md
 pocketbase/*
+
+# Local PocketBase runtime files
+/pb_data/
+/src/data/telemetry.sqlite

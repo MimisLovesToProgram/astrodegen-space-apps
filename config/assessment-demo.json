@@ -1,0 +1,209 @@
+{
+  "schema_version": "astrocrates.assessment-policy.v1",
+  "policy_id": "synthetic-demo-v1",
+  "description": "Fictional point rules for the bundled seven-day simulator and UI testing. Not clinical thresholds or approved team formulas.",
+  "purpose": "synthetic_demo",
+  "simulation_only": true,
+  "source": "synthetic_biosensors",
+  "max_age_seconds": 172800,
+  "domains": {
+    "cardiovascular": {
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ],
+      "rules": [
+        {
+          "id": "hr-change",
+          "metric": "hr_resting",
+          "feature": "baseline_change_pct",
+          "operator": "gt",
+          "threshold": 10,
+          "points": 35,
+          "level": 1,
+          "window": 3
+        },
+        {
+          "id": "hrv-change",
+          "metric": "hrv_rmssd",
+          "feature": "baseline_change_pct",
+          "operator": "lt",
+          "threshold": -10,
+          "points": 35,
+          "level": 2,
+          "window": 3
+        },
+        {
+          "id": "spo2-change",
+          "metric": "spo2",
+          "feature": "baseline_change",
+          "operator": "lt",
+          "threshold": -1,
+          "points": 30,
+          "level": 2,
+          "window": 3
+        }
+      ]
+    },
+    "immune": {
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ],
+      "rules": [
+        {
+          "id": "temperature-change",
+          "metric": "temp_c",
+          "feature": "baseline_change",
+          "operator": "gt",
+          "threshold": 0.3,
+          "points": 40,
+          "level": 2,
+          "window": 3
+        },
+        {
+          "id": "reported-symptoms",
+          "metric": "symptoms",
+          "feature": "count",
+          "operator": "gt",
+          "threshold": 0,
+          "points": 60,
+          "level": 2
+        }
+      ]
+    },
+    "behavioral": {
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ],
+      "rules": [
+        {
+          "id": "mood-demo",
+          "metric": "mood",
+          "feature": "value",
+          "operator": "lte",
+          "threshold": 2,
+          "points": 35,
+          "level": 2
+        },
+        {
+          "id": "sleep-quality-demo",
+          "metric": "sleep_quality",
+          "feature": "value",
+          "operator": "lte",
+          "threshold": 2,
+          "points": 35,
+          "level": 2
+        },
+        {
+          "id": "sleep-demo",
+          "metric": "sleep_h",
+          "feature": "value",
+          "operator": "lt",
+          "threshold": 6,
+          "points": 20,
+          "level": 1
+        },
+        {
+          "id": "social-demo",
+          "metric": "social_interaction",
+          "feature": "value",
+          "operator": "eq",
+          "threshold": false,
+          "points": 30,
+          "level": 1
+        }
+      ]
+    },
+    "bone_loss": {
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ],
+      "rules": [
+        {
+          "id": "exercise-streak-demo",
+          "metric": "exercise_logged",
+          "feature": "value",
+          "operator": "eq",
+          "threshold": false,
+          "points": 70,
+          "level": 2,
+          "consecutive": 2,
+          "min_span_seconds": 86400,
+          "max_gap_seconds": 172800
+        },
+        {
+          "id": "sleep-change-demo",
+          "metric": "sleep_h",
+          "feature": "baseline_change_pct",
+          "operator": "lt",
+          "threshold": -10,
+          "points": 30,
+          "level": 1,
+          "window": 3,
+          "consecutive": 2,
+          "min_span_seconds": 86400,
+          "max_gap_seconds": 172800
+        }
+      ]
+    }
+  }
+}

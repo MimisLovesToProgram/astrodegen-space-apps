@@ -18,6 +18,7 @@ from .service import get_validated_observations, ingest_batch
 
 
 def demo_measurements():
+    # Stable demo identities make a repeated run exercise duplicate detection.
     common = {
         "astronaut_id": "crew_01", "captured_at": "2026-11-14T00:00:00Z",
         "source": "synthetic_demo_01", "context": {"simulated": True},
@@ -54,6 +55,8 @@ def main():
         except ValueError:
             parser.error("--reference-time must be an ISO timestamp with a timezone")
     if args.sensor_demo or args.sensor_input:
+        # Sensor packets need expansion; --input instead accepts an already
+        # canonical array of individual observations.
         if args.sensor_demo:
             packets, simulation_time = simulated_mission()
             output = process_sensor_packets(

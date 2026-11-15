@@ -28,6 +28,8 @@ def validate_pending_packets(db_path="data/telemetry.sqlite", *, limit=100, pack
     processed = []
     with closing(connect_database(db_path)) as connection:
         with connection:
+            # Selecting pending rows and marking them complete share this
+            # transaction. A failure rolls back both results and markers.
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
                 f"""SELECT id, payload, payload_encoding, assume_utc, received_at, validation_time
@@ -36,6 +38,8 @@ def validate_pending_packets(db_path="data/telemetry.sqlite", *, limit=100, pack
             ).fetchall()
             for packet_id, payload, encoding, assume_utc, received, validation_time in rows:
                 packet = json.loads(payload) if encoding == "json" else payload
+                # Diagnostic Python representations are never evaluated; they
+                # remain strings that the validator will quarantine.
                 result = _ingest_on_connection(
                     connection, sensor_observations([packet], assume_utc=bool(assume_utc)),
                     received_at=received,

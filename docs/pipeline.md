@@ -8,8 +8,8 @@ Step 2: bounded worker reads pending packets
   -> validator checks formatting, units, timestamps, and plausibility
   -> transaction commits per-metric outcomes + clean observations + processed marker
 Step 3: clean historical observations
-  -> optional assessment function / authenticated history API
-  -> risk calculations still to be implemented
+  -> explicit policy + durable assessment job
+  -> versioned results + escalation events + authenticated crew history API
 ```
 
 Step 1 persists data before validation. Invalid packets remain available for inspection. Step 2 never assigns health-risk labels: a heart rate of 135 bpm can pass data-quality checks. Step 3 owns interpretation.
@@ -58,7 +58,7 @@ For the local Python connection:
 ```python
 from ingest_validate import process_sensor_packets
 
-# risk_engine.assess is supplied by the Step 3 owner.
+# We can supply an assessment callback for an explicit policy.
 result = process_sensor_packets(
     sensor_packets,
     db_path="data/telemetry.sqlite",
@@ -79,6 +79,12 @@ history = store.get_history("a", limit=250)
 assessment = risk_engine.assess("a", history)
 ```
 
-The commands also export `step3_history` after processing. Without an actual risk engine, they explicitly report `assessment_status: "not_configured"`.
+The commands also export `step3_history` after processing. An explicit `--assessment-policy` queues durable work; `--run-assessment` also executes it. Without a policy, commands report `assessment_status: "not_configured"`.
 
-Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew-specific frontend authorization, missing-data monitoring, and agreed risk formulas remain tasks in the [schedule](task-plan.md). See [PocketBase setup](../backend/pocketbase/README.md) for collection rules and real API tests.
+Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew authorization, and quality monitoring are now implemented. The team must still review the provisional score bands and rehearse the connected frontend on its devices. See the [assessment guide](assessment.md), [crew API contract](frontend-api.md), and [schedule](task-plan.md). See [PocketBase setup](../backend/README.md) for collection rules and real API tests.
+
+## Step 2 monitoring and configured local backend
+
+The local setup command (`python3 -m ingest_validate.setup`, with `PYTHONPATH=src`) backs up the existing database, provisions private service-role files, preserves the original administrator, and leaves the local server running. The common CLI reads `.env` or an explicit `--env-file`.
+
+`quality` reports missing/stale metrics and source acceptance counts using an explicit age policy. `contract` publishes the validator-derived schema, and `handoff` wraps clean history with `astrocrates.observation.v1`. See the [sensor contract](sensor-contract.md) and [backend guide](../backend/README.md) for commands and verified local results. These quality summaries do not calculate health risk.

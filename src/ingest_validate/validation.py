@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 
 NUMERIC_RULES = {
+    # Each rule defines canonical unit, minimum, maximum, and integer-only flag.
     "hr_resting": ("bpm", 20, 250, False),
     "hrv_rmssd": ("ms", 0, 500, False),
     "spo2": ("%", 0, 100, False),
@@ -50,6 +51,7 @@ def validate_observation(raw, reference_time=None):
         return {"status": "quarantined", "errors": [reason], "observation": None}
 
     if not isinstance(raw, dict):
+        # Reject malformed envelopes before reading individual metric fields.
         return reject("Measurement must be an object")
     missing = REQUIRED_FIELDS - raw.keys()
     if missing:
@@ -65,6 +67,8 @@ def validate_observation(raw, reference_time=None):
     if not isinstance(context, dict):
         return reject("context must be an object")
     try:
+        # An explicit clock makes replay deterministic; UTC normalization also
+        # ensures equivalent timezone representations share one identity.
         captured = datetime.fromisoformat(raw["captured_at"].replace("Z", "+00:00"))
         timestamp = utc_string(captured)
         if captured > now + timedelta(minutes=5):
@@ -83,6 +87,8 @@ def validate_observation(raw, reference_time=None):
         if unit != "bool" or not isinstance(value, bool):
             return reject(f"{metric} requires a boolean value and unit 'bool'")
     elif metric in NUMERIC_RULES:
+        # Python treats bool as a subtype of int, so exclude booleans before
+        # numeric checks. Perform unit conversion before plausibility checks.
         canonical_unit, lower, upper, integer = NUMERIC_RULES[metric]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return reject("value must be a finite number, not a boolean")

@@ -1,0 +1,233 @@
+{
+  "schema_version": "astrocrates.assessment-policy.v1",
+  "policy_id": "team-notes-synthetic-v1",
+  "purpose": "team_defined",
+  "simulation_only": true,
+  "source": "synthetic_biosensors",
+  "max_age_seconds": 129600,
+  "description": "Team notes, section 3. UTC daily logs; preceding seven complete UTC days use the daily median. Provisional Yellow=20 and Red=80 approved for review; Orange uses each team trigger. Scores are prototype points, not clinical probabilities.",
+  "domains": {
+    "immune": {
+      "rules": [
+        {
+          "id": "sleep-three-days",
+          "metric": "sleep_h",
+          "feature": "value",
+          "operator": "lt",
+          "threshold": 6,
+          "points": 30,
+          "level": 1,
+          "daily": true,
+          "consecutive": 3
+        },
+        {
+          "id": "spo2",
+          "metric": "spo2",
+          "feature": "value",
+          "operator": "lt",
+          "threshold": 95,
+          "points": 25,
+          "level": 1
+        },
+        {
+          "id": "temperature",
+          "metric": "temp_c",
+          "feature": "value",
+          "operator": "gt",
+          "threshold": 37.5,
+          "points": 20,
+          "level": 1
+        },
+        {
+          "id": "specific-symptoms",
+          "metric": "symptoms",
+          "feature": "contains_any",
+          "operator": "eq",
+          "threshold": 1,
+          "matches": [
+            "sore throat",
+            "fatigue"
+          ],
+          "points": 15,
+          "level": 1
+        },
+        {
+          "id": "hrv-baseline",
+          "metric": "hrv_rmssd",
+          "feature": "baseline_change_pct",
+          "operator": "lt",
+          "threshold": -20,
+          "window_days": 7,
+          "points": 10,
+          "level": 1
+        }
+      ],
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 60,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ]
+    },
+    "cardiovascular": {
+      "rules": [
+        {
+          "id": "hr-two-days",
+          "metric": "hr_resting",
+          "feature": "baseline_change",
+          "operator": "gt",
+          "threshold": 15,
+          "window_days": 7,
+          "daily": true,
+          "consecutive": 2,
+          "points": 25,
+          "level": 1
+        },
+        {
+          "id": "hrv-baseline",
+          "metric": "hrv_rmssd",
+          "feature": "baseline_change_pct",
+          "operator": "lt",
+          "threshold": -25,
+          "window_days": 7,
+          "points": 20,
+          "level": 1
+        },
+        {
+          "id": "activity-target",
+          "metric": "activity_pct_target",
+          "feature": "value",
+          "operator": "lt",
+          "threshold": 50,
+          "points": 15,
+          "level": 1
+        }
+      ],
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 55,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ]
+    },
+    "behavioral": {
+      "rules": [
+        {
+          "id": "mood-two-days",
+          "metric": "mood",
+          "feature": "value",
+          "operator": "lte",
+          "threshold": 2,
+          "daily": true,
+          "consecutive": 2,
+          "points": 20,
+          "level": 1
+        },
+        {
+          "id": "sleep-quality",
+          "metric": "sleep_quality",
+          "feature": "value",
+          "operator": "lte",
+          "threshold": 2,
+          "points": 20,
+          "level": 1
+        },
+        {
+          "id": "social-48-hours",
+          "metric": "social_interaction",
+          "feature": "hours_since_true",
+          "operator": "gte",
+          "threshold": 48,
+          "max_gap_seconds": 129600,
+          "points": 15,
+          "level": 1
+        }
+      ],
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ]
+    },
+    "bone_loss": {
+      "rules": [
+        {
+          "id": "missed-exercise-days",
+          "metric": "exercise_logged",
+          "feature": "missed_mission_days",
+          "operator": "gt",
+          "threshold": 0,
+          "daily": true,
+          "points_per_unit": true,
+          "points": 2,
+          "level": 1
+        },
+        {
+          "id": "exercise-14-days",
+          "metric": "exercise_logged",
+          "feature": "hours_since_true",
+          "operator": "gt",
+          "threshold": 336,
+          "max_gap_seconds": 129600,
+          "points": 20,
+          "level": 1
+        }
+      ],
+      "bands": [
+        {
+          "min_points": 0,
+          "level": 0
+        },
+        {
+          "min_points": 20,
+          "level": 1
+        },
+        {
+          "min_points": 50,
+          "level": 2
+        },
+        {
+          "min_points": 80,
+          "level": 3
+        }
+      ]
+    }
+  }
+}

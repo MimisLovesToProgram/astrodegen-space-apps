@@ -33,6 +33,8 @@ def ingest_batch(measurements, db_path="data/telemetry.sqlite", reference_time=N
     received_at = utc_string(now)
     with closing(connect_database(db_path)) as connection:
         with connection:
+            # Acquire the write lock before checking observation identities so
+            # two local writers cannot both decide a measurement is new.
             connection.execute("BEGIN IMMEDIATE")
             return _ingest_on_connection(connection, measurements, received_at=received_at, reference_time=now)
 
@@ -45,6 +47,8 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
         status, errors = result["status"], result["errors"]
         observation = result["observation"]
         if observation is not None:
+            # Identity finds a measurement; normalized content distinguishes a
+            # harmless retransmission from a changed value at that identity.
             identity = tuple(observation[key] for key in (
                 "astronaut_id", "metric", "captured_at", "source"
             ))
@@ -64,6 +68,8 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
                     errors = ["A different measurement already exists at this identity"]
 
         payload, encoding = _raw_payload(raw)
+        # Audit every outcome, including duplicates, while linking back to the
+        # original packet instead of repeating the entire packet in each row.
         cursor = connection.execute(
             """INSERT INTO raw_measurements
                (received_at, payload, payload_encoding, status, errors_json, sensor_packet_id)
@@ -88,7 +94,7 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
     return summary
 
 
-def get_validated_observations(db_path, astronaut_id, limit=100):
+def get_validated_observations(db_path, astronaut_id, limit=100, *, source=None):
     """Return a crew member's clean history, newest first, for Step 3.
 
     quality_flags describe transformations, not medical risk or verified sensor
@@ -98,13 +104,17 @@ def get_validated_observations(db_path, astronaut_id, limit=100):
         raise ValueError("astronaut_id is required")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10000:
         raise ValueError("limit must be an integer between 1 and 10000")
+    if source is not None and (not isinstance(source, str) or not source.strip()):
+        raise ValueError("source must be a nonempty string")
+    source_filter = " AND source = ?" if source is not None else ""
+    parameters = (astronaut_id, source, limit) if source is not None else (astronaut_id, limit)
     with closing(connect_database(db_path)) as connection:
         rows = connection.execute(
             """SELECT astronaut_id, metric, captured_at, source, unit,
                       value_json, context_json, quality_flags_json
-               FROM validated_observations WHERE astronaut_id=?
+               FROM validated_observations WHERE astronaut_id=?""" + source_filter + """
                ORDER BY captured_at DESC, id DESC LIMIT ?""",
-            (astronaut_id, limit),
+            parameters,
         ).fetchall()
     return [
         {"astronaut_id": row[0], "metric": row[1], "captured_at": row[2],

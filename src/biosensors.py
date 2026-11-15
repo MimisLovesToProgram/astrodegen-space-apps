@@ -6,10 +6,9 @@ from datetime import datetime, timedelta
 INTERVAL = 3
 MODE = 'story'
 
-# 3 astronauts each on a differeent trajectory:
-# a -> deteoriates over the week hits ORANGE by day 5 (immune)
-# b -> remains stable and heatlhy all time GREEN
-# c -> slow bone loss (bone)
+# Three fictional trajectories supply repeatable demo inputs. These fixtures
+# describe a story; they do not calculate risk scores or clinical diagnoses.
+# a: temporary deterioration, b: stable readings, c: sustained gradual change.
 
 Crew = {
     'a': [{'hr': 62, 'hrv': 65, 'spo2': 98, 'temp': 36.6, 'rad': 0.5, 'sleep': 7.8, 'sq': 4, 'mood': 4, 'sym': [], 'ex': True, 'soc': True},
@@ -52,6 +51,8 @@ Crew = {
 
 
 def reading_from(crew_id, d, day):
+    # Expand abbreviated fixture keys into the full Step 1 packet schema.
+    # The fixed mission clock is interpreted explicitly by the capture command.
     return {
         'crew_id': crew_id,
         'mission_day': day,
@@ -72,6 +73,8 @@ def reading_from(crew_id, d, day):
 
 
 def noise_from(crew_id, i):
+    # Continuous mode varies synthetic values around a stable baseline. The
+    # capture command converts this generator's local timestamp to aware UTC.
     r = random
     return {
         'crew_id': crew_id,
@@ -92,6 +95,8 @@ def noise_from(crew_id, i):
 
 
 if __name__ == "__main__":
+    # Direct execution retains the original JSON Lines output for file replay.
+    # Use the astrocrates capture command to persist packets before validation.
     try:
         if MODE == "story":
             for day in range(1, 8):

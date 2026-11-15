@@ -1,3 +1,4 @@
+import 'package:app_frontend/screens/status_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:app_frontend/logic/view_models.dart';
@@ -16,6 +17,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
 
   /// The index of our current question
   int currentQuestionIndx = 0;
+
+  bool gettingSensorData = false;
 
   @override
   Widget build(BuildContext context) {
@@ -69,12 +72,16 @@ class _CheckinScreenState extends State<CheckinScreen> {
                     if (currentQuestion.type == QuestionType.num)
                       SizedBox(
                         width: 150,
-                        child: NumTextField(q: currentQuestion)
+                        child: NumTextField(key: ObjectKey(currentQuestion), q: currentQuestion)
                       ),
+
+                    // If it's a list, give a text field for text
+                    if (currentQuestion.type == QuestionType.list)
+                      ListTextField(key: ObjectKey(currentQuestion), q: currentQuestion),
                 
                     // If it's a 1-5, give a slider
                     if (currentQuestion.type == QuestionType.onetofive)
-                      OneToFiveSlider(q: currentQuestion),
+                      OneToFiveSlider(key: ObjectKey(currentQuestion), q: currentQuestion),
                 
                     // If it's a yes / no, show 2 respective buttons
                     if (currentQuestion.type == QuestionType.yesno)
@@ -88,8 +95,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             height: 55,
                             child: FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 255, 100, 100)),
-                              onPressed: () {
-                                currentQuestion.answer = 0;
+                              onPressed: () async {
+                                currentQuestion.numAnswer = 0;
                                 
                                 if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
                                  
@@ -98,7 +105,24 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                   });
 
                                 } else {
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
 
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
                                 }
                               },
                             
@@ -112,8 +136,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             height: 55,
                             child: FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 142, 250, 18)),
-                              onPressed: () {
-                                currentQuestion.answer = 1;
+                              onPressed: () async {
+                                currentQuestion.numAnswer = 1;
 
                                 if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
                                   
@@ -122,7 +146,24 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                   });
 
                                 } else {
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
                                   
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
                                 }
                               },
                             
@@ -161,16 +202,31 @@ class _CheckinScreenState extends State<CheckinScreen> {
 
                         Spacer(),
 
-                        // If we're not on the last question, show the back button.
+                        // If we're not on the last question, show the next button.
                         if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length)
                           SizedBox(
                             width: 110,
                             height: 50,
                             child: FilledButton(
+
                               onPressed: () {
-                                setState(() {
-                                  currentQuestionIndx++;
-                                });
+                                if (currentQuestion.numAnswer != null) {
+                                
+                                  setState(() {
+                                    currentQuestionIndx++;
+                                  });
+
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Can't continue with no answer given!"),
+                                      showCloseIcon: true,
+                                      duration: Duration(seconds: 4),
+                                      padding: EdgeInsets.all(10),
+                                    )
+                                  );
+                                }
+
                               },
                             
                               child: Row(
@@ -182,6 +238,52 @@ class _CheckinScreenState extends State<CheckinScreen> {
                               ),
                             ),
                           ),
+
+                        // If we are on the last question, show the submit button.
+                        if (currentQuestionIndx + 1 == AppData.instance.checkinQuestions.length)
+                          SizedBox(
+                            width: 110,
+                            height: 50,
+                            child: FilledButton(
+
+                              onPressed: () async {
+                                if (currentQuestion.numAnswer != null) {
+                                
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+                                  
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
+
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Can't continue with no answer given!"),
+                                      showCloseIcon: true,
+                                      duration: Duration(seconds: 4),
+                                      padding: EdgeInsets.all(10),
+                                    )
+                                  );
+                                }
+
+                              },
+                            
+                              child: Text("Submit"),
+                            ),
+                          ),
                       ],
                     ),
 
@@ -190,6 +292,39 @@ class _CheckinScreenState extends State<CheckinScreen> {
               )
             ),
           ),
+
+
+          // Loading (waiting for the sensor data)
+          if (gettingSensorData)
+            Positioned.fill(
+              child: Container(
+                color: const Color.fromARGB(150, 10, 0, 0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+
+                      Text(
+                        "Waiting for sensor data",
+                        style: TextStyle(fontSize: 26, color: Colors.white),
+                      ),
+
+                      SizedBox(height: 15),
+
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 6,
+                        )
+                      )
+
+                    ],
+                  ),
+                )
+              ),
+            ),
         ],
       ),
     );
@@ -225,8 +360,38 @@ class _NumTextFieldState extends State<NumTextField> {
       onChanged: (value) {
         int? ans = int.tryParse(value);
         if (ans != null) {
-          widget.q.answer = ans;
+          widget.q.numAnswer = ans;
         }
+      },
+    );
+
+  }
+
+}
+
+class ListTextField extends StatefulWidget {
+  const ListTextField({super.key, required this.q});
+
+  final Question q;
+
+  @override
+  State<ListTextField> createState() => _ListTextFieldState();
+}
+
+class _ListTextFieldState extends State<ListTextField> {
+
+  TextEditingController listTextController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+
+    return TextField(
+      controller: listTextController,
+      decoration: fieldDecoration("Symptoms List"),
+
+      onChanged: (value) {
+        final symptoms = value.split(",");
+        widget.q.listAns = symptoms;
       },
     );
 
@@ -246,6 +411,13 @@ class OneToFiveSlider extends StatefulWidget {
 class _OneToFiveSliderState extends State<OneToFiveSlider> {
 
   int sliderValue = 3;
+
+  @override
+  void initState() {
+    super.initState();
+
+    widget.q.numAnswer = 3;
+  }
 
   @override
   Widget build(BuildContext context) {

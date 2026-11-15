@@ -28,6 +28,8 @@ def capture_sensor_packets(packets, db_path="data/telemetry.sqlite", *,
     with closing(connect_database(db_path)) as connection:
         with connection:
             for packet in packets:
+                # Preserve the original capture time separately from the real
+                # receive clock and the optional synthetic validation clock.
                 received = datetime.now(timezone.utc)
                 payload, encoding = _raw_payload(packet)
                 captured = packet.get("timestamp") if isinstance(packet, dict) else None

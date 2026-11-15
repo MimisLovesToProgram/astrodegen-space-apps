@@ -1,7 +1,6 @@
 """PocketBase HTTP adapter; never opens or edits PocketBase's SQLite files."""
 
 import json
-import os
 import uuid
 from datetime import datetime
 from urllib.error import HTTPError, URLError
@@ -9,6 +8,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from .adapters import sensor_observations
+from .config import connection_settings
 from .service import _raw_payload
 from .validation import json_string, utc_string, validate_observation
 
@@ -29,6 +29,8 @@ class PocketBaseTelemetry:
         self.timeout = timeout
 
     def request(self, method, path, body=None, query=None):
+        # Encode filters as query parameters instead of concatenating user
+        # input into a URL. Credentials are sent in headers or request bodies.
         suffix = "?" + urlencode(query) if query else ""
         headers = {"Content-Type": "application/json"}
         if self.token:
@@ -56,11 +58,12 @@ class PocketBaseTelemetry:
         return response["record"]
 
     @classmethod
-    def from_environment(cls):
-        client = cls(os.environ.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
-                     os.environ.get("POCKETBASE_TOKEN"))
+    def from_environment(cls, env_file=None):
+        settings = connection_settings(env_file)
+        client = cls(settings.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
+                     settings.get("POCKETBASE_TOKEN"))
         if not client.token:
-            email, password = os.environ.get("POCKETBASE_EMAIL"), os.environ.get("POCKETBASE_PASSWORD")
+            email, password = settings.get("POCKETBASE_EMAIL"), settings.get("POCKETBASE_PASSWORD")
             if not email or not password:
                 raise ValueError("Set POCKETBASE_TOKEN or POCKETBASE_EMAIL and POCKETBASE_PASSWORD")
             client.authenticate(email, password)
@@ -73,6 +76,8 @@ class PocketBaseTelemetry:
         payload, encoding = _raw_payload(packet)
         captured = packet.get("timestamp") if isinstance(packet, dict) else None
         body = {
+            # Construct this envelope once: a network retry must retain the
+            # same delivery key rather than insert a second raw delivery.
             "delivery_key": delivery_key or uuid.uuid4().hex,
             "payload": payload, "payload_encoding": encoding,
             "captured_at": captured if isinstance(captured, str) else "",
@@ -87,10 +92,12 @@ class PocketBaseTelemetry:
                     raise
 
     def validation_results(self, record):
+        # Validate against the stored receive/replay clock. Waiting to process
+        # a packet must not make its originally future timestamp acceptable.
         packet = json.loads(record["payload"]) if record["payload_encoding"] == "json" else record["payload"]
         clock = datetime.fromisoformat((record["validation_time"] or record["received_at"]).replace("Z", "+00:00"))
         results = []
-        for raw in sensor_observations([packet], assume_utc=record["assume_utc"]):
+        for raw in sensor_observations([packet], assume_utc=record["assume_utc"], source=record["source"]):
             result = validate_observation(raw, clock)
             observation = result["observation"]
             if observation is not None:
@@ -122,18 +129,25 @@ class PocketBaseTelemetry:
                 summary[key].extend(result["ingestion"][key])
         return {"packet_ids": processed, "ingestion": summary}
 
-    def get_history(self, astronaut_id, limit=250):
+    def get_history(self, astronaut_id, limit=250, *, source=None):
         """Read the same normalized observation contract used by local Step 3."""
         if not isinstance(astronaut_id, str) or not astronaut_id.strip():
             raise ValueError("astronaut_id is required")
         if type(limit) is not int or not 1 <= limit <= 10000:
             raise ValueError("limit must be an integer between 1 and 10000")
+        if source is not None and (not isinstance(source, str) or not source.strip()):
+            raise ValueError("source must be a nonempty string")
+        filters = "astronaut_id=" + json_string(astronaut_id)
+        if source is not None:
+            filters += " && observation.source=" + json_string(source)
         history = []
         page = 1
         page_size = min(limit, 500)
         while len(history) < limit:
+            # PocketBase paginates records; unwrap only normalized observations
+            # and respect the caller's limit rather than returning API metadata.
             records = self.request("GET", "/api/collections/validated_observations/records", query={
-                "filter": "astronaut_id=" + json_string(astronaut_id),
+                "filter": filters,
                 "sort": "-captured_at,-id", "perPage": page_size, "page": page, "skipTotal": "true",
             })["items"]
             history.extend(record["observation"] for record in records)
@@ -141,3 +155,98 @@ class PocketBaseTelemetry:
                 break
             page += 1
         return history[:limit]
+
+    def get_audit_summary(self):
+        """Read worker-only aggregate counts without downloading raw packets."""
+        return self.request("GET", "/api/astrocrates/quality-summary")
+
+    def save_quality_alerts(self, snapshot):
+        from .alerts import validate_snapshot
+        validate_snapshot(snapshot)
+        return self.request("POST", "/api/astrocrates/quality-alerts", snapshot)
+
+    def list_quality_alerts(self, *, status="active", astronaut_id=None, policy_name=None, limit=100):
+        if status not in {"active", "resolved", "all"} or type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("Use status active/resolved/all and an integer limit between 1 and 10000")
+        conditions = []
+        for field, value in (("status", None if status == "all" else status),
+                             ("astronaut_id", astronaut_id), ("policy_name", policy_name)):
+            if value is not None:
+                conditions.append(field + "=" + json_string(value))
+        alerts, page = [], 1
+        page_size = min(limit, 500)
+        while len(alerts) < limit:
+            records = self.request("GET", "/api/collections/quality_alerts/records", query={
+                "filter": " && ".join(conditions), "sort": "-last_checked_at,alert_key",
+                "perPage": page_size, "page": page, "skipTotal": "true",
+            })["items"]
+            # We return the same public fields as SQLite and hide PocketBase's
+            # collection metadata from callers that use either backend.
+            for record in records:
+                alert = {key: record[key] for key in (
+                    "alert_key", "scope_key", "policy_name", "astronaut_id", "metric", "source", "kind",
+                    "status", "first_detected_at", "last_checked_at", "resolved_at", "occurrences", "evidence")}
+                alert["resolved_at"] = alert["resolved_at"] or None
+                alerts.append(alert)
+            if len(records) < page_size:
+                break
+            page += 1
+        return alerts[:limit]
+
+    def enqueue_assessment(self, history, astronaut_id, policy, *, as_of=None, history_limit=10000):
+        from assessment.jobs import make_job
+        job = make_job(history, astronaut_id, policy, as_of=as_of, history_limit=history_limit)
+        return self.request("POST", "/api/astrocrates/assessment-jobs", job)
+
+    def claim_assessment_job(self, *, job_id=None, lease_seconds=30):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/claim",
+                            {"job_id": job_id, "lease_seconds": lease_seconds})["job"]
+
+    def complete_assessment_job(self, job_id, claim_token, result):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/complete",
+                            {"job_id": job_id, "claim_token": claim_token, "result": result})
+
+    def fail_assessment_job(self, job_id, claim_token, error):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/fail",
+                            {"job_id": job_id, "claim_token": claim_token, "error": error})
+
+    def retry_assessment_job(self, job_id, *, reset_attempts=False):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/retry",
+                            {"job_id": job_id, "reset_attempts": reset_attempts})
+
+    def _assessment_records(self, collection, *, filters="", sort="", limit=100, fields=None):
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("limit must be between 1 and 10000")
+        records, page = [], 1
+        size = min(limit, 500)
+        while len(records) < limit:
+            query = {"filter": filters, "sort": sort, "page": page, "perPage": size, "skipTotal": "true"}
+            if fields:
+                query["fields"] = fields
+            batch = self.request("GET", f"/api/collections/{collection}/records", query=query)["items"]
+            records.extend(batch)
+            if len(batch) < size:
+                break
+            page += 1
+        return records[:limit]
+
+    def get_assessments(self, astronaut_id, limit=250, *, policy_id=None):
+        filters = "astronaut_id=" + json_string(astronaut_id)
+        if policy_id is not None:
+            filters += " && policy_id=" + json_string(policy_id)
+        records = self._assessment_records("assessment_runs", filters=filters,
+                                           sort="-assessed_at,-created_at,-id", limit=limit)
+        return [{**record["result"], "run_id": record["id"]} for record in records]
+
+    def list_assessment_jobs(self, *, status=None, limit=100):
+        if status is not None and status not in {"pending", "running", "complete", "failed"}:
+            raise ValueError("Unsupported job status")
+        return self._assessment_records("assessment_jobs", filters="status=" + json_string(status) if status else "",
+            sort="as_of,created_at,id", limit=limit,
+            fields="id,status,astronaut_id,policy_id,as_of,attempts,error,result_run_id,created_at")
+
+    def list_escalations(self, *, astronaut_id=None, limit=100):
+        filters = ""
+        if astronaut_id is not None:
+            filters = "astronaut_id=" + json_string(astronaut_id)
+        return self._assessment_records("escalation_events", filters=filters, sort="-occurred_at,-id", limit=limit)

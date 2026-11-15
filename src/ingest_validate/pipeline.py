@@ -23,11 +23,16 @@ def process_sensor_packets(packets, db_path="data/telemetry.sqlite", *,
         packets, db_path, assume_utc=assume_utc, reference_time=reference_time,
     )
     crew_ids = sorted({item["astronaut_id"] for item in ingestion["accepted"]})
+    # Only crews with new accepted data need reassessment. Their clean history
+    # includes previous readings, not just the latest packet's measurements.
     histories = {
         crew_id: get_validated_observations(db_path, crew_id, history_limit)
         for crew_id in crew_ids
     }
     assessments = {
+        # Assessment happens after ingestion commits, so a failed risk engine
+        # cannot erase already accepted data. Durable assessment retries are
+        # the responsibility of the future Step 3 job layer.
         crew_id: assess(crew_id, history) for crew_id, history in histories.items()
     } if assess is not None else {}
     return {

@@ -32,6 +32,8 @@ class WorkerTests(unittest.TestCase):
             self.assertNotIn('"sensor_packet":', connection.execute("SELECT payload FROM raw_measurements LIMIT 1").fetchone()[0])
 
     def test_failure_leaves_captured_packets_pending(self):
+        # Abort in the middle of writing a packet to prove that both metric
+        # records and completion markers roll back together.
         with sqlite3.connect(self.db) as connection:
             connection.execute("""CREATE TRIGGER fail_worker BEFORE INSERT ON validated_observations
                 WHEN NEW.metric='spo2' BEGIN SELECT RAISE(ABORT, 'test storage failure'); END""")
