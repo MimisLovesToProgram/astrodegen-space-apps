@@ -5,7 +5,7 @@ import operator
 from datetime import datetime, timezone
 
 from ingest_validate.validation import json_string, utc_string
-from .features import feature_value
+from .temporal import daily_readings, evaluate_feature, timestamp
 from .policy import COLORS, DOMAINS, policy_digest, validate_policy
 
 
@@ -20,6 +20,8 @@ def _timestamp(value):
 
 def _history(history, astronaut_id, policy, as_of):
     needed = {rule["metric"] for domain in policy["domains"].values() for rule in domain["rules"]}
+    if any(rule["feature"] == "missed_mission_days" for domain in policy["domains"].values() for rule in domain["rules"]):
+        needed.add("mission_day")
     chosen = {}
     excluded_future = 0
     for observation in history:
@@ -47,7 +49,9 @@ def _history(history, astronaut_id, policy, as_of):
     return ordered, streams, excluded_future
 
 
-def _rule_result(rule, readings, policy, as_of):
+def _rule_result(rule, readings, policy, as_of, streams):
+    if rule.get("daily"):
+        readings = daily_readings(readings)
     result = {"rule_id": rule["id"], "metric": rule["metric"],
               "source": policy.get("metric_sources", {}).get(rule["metric"], policy["source"]),
               "available": False, "triggered": None, "points": None, "level": None, "features": []}
@@ -61,6 +65,9 @@ def _rule_result(rule, readings, policy, as_of):
     if len(readings) < streak:
         return {**result, "reason": "insufficient_streak"}
     recent = readings[-streak:]
+    if rule.get("daily") and any((timestamp(b).date() - timestamp(a).date()).days != 1
+                                  for a, b in zip(recent, recent[1:])):
+        return {**result, "reason": "missing_calendar_day"}
     times = [_timestamp(item["captured_at"]) for item in recent]
     if (times[-1] - times[0]).total_seconds() < rule.get("min_span_seconds", 0):
         return {**result, "reason": "insufficient_streak_span"}
@@ -68,7 +75,7 @@ def _rule_result(rule, readings, policy, as_of):
         return {**result, "reason": "sampling_gap"}
     # We evaluate every point in a streak against its own preceding baseline,
     # rather than reuse the newest baseline for older observations.
-    features = [feature_value(readings, index, rule["feature"], rule.get("window", 3))
+    features = [evaluate_feature(rule, readings, index, streams, as_of if index == len(readings) - 1 else timestamp(readings[index]))
                 for index in range(len(readings) - streak, len(readings))]
     result["features"] = features
     unavailable = next((value for value in features if value["value"] is None), None)
@@ -79,7 +86,7 @@ def _rule_result(rule, readings, policy, as_of):
         return {**result, "reason": "incompatible_rule_value"}
     triggered = all(COMPARISONS[rule["operator"]](value, rule["threshold"]) for value in values)
     return {**result, "available": True, "triggered": triggered,
-            "points": rule["points"] if triggered else 0, "level": rule["level"] if triggered else 0}
+            "points": min(100, rule["points"] * (values[-1] if rule.get("points_per_unit") else 1)) if triggered else 0, "level": rule["level"] if triggered else 0}
 
 
 def assess_history(history, astronaut_id, policy, *, as_of=None):
@@ -97,7 +104,7 @@ def assess_history(history, astronaut_id, policy, *, as_of=None):
     domains, metric_rules = {}, {}
     for name in DOMAINS:
         definition = policy["domains"][name]
-        rules = [_rule_result(rule, streams.get(rule["metric"], []), policy, clock) for rule in definition["rules"]]
+        rules = [_rule_result(rule, streams.get(rule["metric"], []), policy, clock, streams) for rule in definition["rules"]]
         for result in rules:
             metric_rules.setdefault(result["metric"], []).append(result)
         known_points = sum(result["points"] or 0 for result in rules)

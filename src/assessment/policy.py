@@ -10,7 +10,7 @@ from ingest_validate.validation import BOOLEAN_METRICS, NUMERIC_RULES, json_stri
 
 DOMAINS = ("cardiovascular", "immune", "behavioral", "bone_loss")
 COLORS = ("green", "yellow", "orange", "red")
-FEATURES = {"value", "count", "baseline_change", "baseline_change_pct", "mad_deviation", "trend_per_day"}
+FEATURES = {"value", "count", "baseline_change", "baseline_change_pct", "mad_deviation", "trend_per_day", "contains_any", "hours_since_true", "missed_mission_days"}
 OPERATORS = {"gt", "gte", "lt", "lte", "eq"}
 
 
@@ -91,16 +91,16 @@ def _validate_domain(name, domain, known_metrics):
 
 def _validate_rule(rule, known_metrics):
     required = {"id", "metric", "feature", "operator", "threshold", "points", "level"}
-    optional = {"window", "consecutive", "min_span_seconds", "max_gap_seconds"}
+    optional = {"window", "consecutive", "min_span_seconds", "max_gap_seconds", "daily", "window_days", "matches", "points_per_unit"}
     if not isinstance(rule, dict) or not required <= set(rule) or set(rule) - required - optional:
         raise ValueError("A rule has missing or unknown fields")
     if not isinstance(rule["id"], str) or not rule["id"].strip() or rule["metric"] not in known_metrics:
         raise ValueError("Rules require an ID and a supported metric")
     if rule["feature"] not in FEATURES or rule["operator"] not in OPERATORS:
         raise ValueError("Unsupported feature or comparison operator")
-    if rule["metric"] in BOOLEAN_METRICS and not (rule["feature"] == "value" and rule["operator"] == "eq" and isinstance(rule["threshold"], bool)):
+    if rule["metric"] in BOOLEAN_METRICS and rule["feature"] not in {"hours_since_true", "missed_mission_days"} and not (rule["feature"] == "value" and rule["operator"] == "eq" and isinstance(rule["threshold"], bool)):
         raise ValueError("Boolean metrics require value/eq with a boolean threshold")
-    if (rule["metric"] == "symptoms") != (rule["feature"] == "count"):
+    if (rule["metric"] == "symptoms") != (rule["feature"] in {"count", "contains_any"}):
         raise ValueError("Symptom lists require count; numeric and boolean metrics do not")
     if rule["metric"] in NUMERIC_RULES and isinstance(rule["threshold"], bool):
         raise ValueError("Numeric metrics require numeric thresholds")
@@ -122,3 +122,22 @@ def _validate_rule(rule, known_metrics):
             raise ValueError(field + " must be finite and nonnegative (positive for max_gap_seconds)")
     if streak == 1 and rule.get("min_span_seconds", 0) > 0:
         raise ValueError("A positive minimum span requires more than one observation")
+
+    if "daily" in rule and type(rule["daily"]) is not bool:
+        raise ValueError("daily must be boolean")
+    if "window_days" in rule and (rule["feature"] not in {"baseline_change", "baseline_change_pct", "mad_deviation"}
+            or type(rule["window_days"]) is not int or not 2 <= rule["window_days"] <= 365):
+        raise ValueError("window_days requires a baseline feature and 2 to 365 days")
+    if rule["feature"] == "contains_any":
+        if not isinstance(rule.get("matches"), list) or not rule["matches"] or any(
+                not isinstance(value, str) or not value.strip() for value in rule["matches"]):
+            raise ValueError("contains_any requires symptom names in matches")
+    elif "matches" in rule:
+        raise ValueError("matches is only supported for contains_any")
+    if rule["feature"] in {"hours_since_true", "missed_mission_days"}:
+        if rule["metric"] not in BOOLEAN_METRICS or isinstance(threshold, bool) or rule.get("consecutive", 1) != 1:
+            raise ValueError("Elapsed/mission features require a boolean metric, numeric threshold, and no streak")
+        if rule["feature"] == "missed_mission_days" and rule["metric"] != "exercise_logged":
+            raise ValueError("missed_mission_days requires exercise_logged")
+    if "points_per_unit" in rule and (type(rule["points_per_unit"]) is not bool or rule["feature"] != "missed_mission_days"):
+        raise ValueError("points_per_unit is supported only for missed_mission_days")

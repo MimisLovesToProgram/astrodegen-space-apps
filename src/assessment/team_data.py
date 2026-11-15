@@ -1,9 +1,9 @@
 """Structured health-monitoring data parsed from
-astronaut_health_monitoring_system_data.md.
+docs/team-health-rules.md.
 
 This module holds the telemetry thresholds, domain mappings, and risk
 assessment rules used by the assessment engine. It is data only; all
-evaluation logic lives in assesmentEngine.py.
+evaluation logic lives in assessment/engine.py and assessment/temporal.py.
 """
 
 # ---------------------------------------------------------------------------
@@ -178,7 +178,7 @@ RISK_MODELS = {
              "condition": {"op": "pct_drop_vs_baseline", "value": 25,
                            "baseline_days": 7},
              "description": "hrv < baseline -25%"},
-            {"points": 15, "metric": "exercise_logged",
+            {"points": 15, "metric": "activity_pct_target",
              "condition": {"op": "activity_below_pct_of_target", "value": 50},
              "description": "activity < 50% of target"},
         ],
