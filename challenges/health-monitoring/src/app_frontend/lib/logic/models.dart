@@ -76,7 +76,7 @@ class DateStorage {
       lastDateEntered = DateFormat("yyyy-MM-dd").parse(lastDateStr);
 
     } else {
-      lastDateEntered = DateTime.now();
+      lastDateEntered = DateTime.now().subtract(Duration(days: 2));
     }
   }
 

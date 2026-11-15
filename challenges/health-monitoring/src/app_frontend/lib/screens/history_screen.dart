@@ -125,7 +125,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: const Text('My History', style: TextStyle(color: Colors.white),), 
         backgroundColor: Colors.black,
-        leading: BackButton()
+        leading: BackButton(color: Colors.white)
       ),
       body: Stack(
         children: [

@@ -34,8 +34,8 @@ class AppData extends ChangeNotifier {
       
       // Also only keep the only things you need from item
       Map<String, dynamic> cleanItem = {};
-      cleanItem[ raw.getStringValue("select") ] = raw.getStringValue("value");
-      
+      cleanItem[raw.getStringValue("select")] = raw.getStringValue("value");
+
       result.putIfAbsent(key, () => []).add(cleanItem);
       
     }
@@ -46,7 +46,7 @@ class AppData extends ChangeNotifier {
   Future<void> loadSensorData(String crewId) async {
     final pb = PocketBase('http://10.2.110.80:8090');
     final items = await pb.collection('sensor_readings').getFullList();
-    
+
     sensorAndUserData = groupItemsByDate(items);
   }
 }

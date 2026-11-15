@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 200,
                             height: 200,
                             child: Image.asset(
-                              "assets/logo.png",
+                              "assets/logo_ai.png",
                               fit: BoxFit.fill,
                             )
                           ),
@@ -157,8 +157,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 });
 
                                 if (success) {
-
-                                  if ( DateStorage.instance.lastDateEntered.difference( DateTime.now() ).inDays >= 1 ) {
+                                  print(DateTime.now().difference( DateStorage.instance.lastDateEntered ).inDays);
+                                  if ( DateTime.now().difference( DateStorage.instance.lastDateEntered ).inDays >= 1 ) {
                                     Navigator.pushReplacement(
                                       context,
                                       MaterialPageRoute(builder: (_) => CheckinScreen())

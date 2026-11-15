@@ -9,6 +9,8 @@ import 'logic/models.dart';
 void main() async {
   await DateStorage.instance.init();
 
+  DateStorage.instance.shPref.clear();
+
   runApp(const MainApp());
 }
 
