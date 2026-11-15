@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from ingest_validate.quality import quality_report, summarize_audit
+from ingest_validate.quality import quality_report, sampling_gaps, summarize_audit
 
 
 class QualityTests(unittest.TestCase):
@@ -49,3 +49,34 @@ class QualityTests(unittest.TestCase):
         ]})
         self.assertEqual(report["scope"], "all_database")
         self.assertEqual(report["sources"]["sensor"]["data_acceptance_rate"], 0.75)
+
+    def test_sampling_gaps_keep_sources_separate(self):
+        # We interleave two devices to ensure one cannot conceal the other's gap.
+        history = [
+            {"astronaut_id": "a", "metric": "hr_resting", "source": source,
+             "captured_at": "2026-11-22T11:" + timestamp + "Z"}
+            for source, timestamp in (("one", "57:00"), ("one", "59:00"),
+                                      ("two", "58:00"), ("two", "59:00"), ("two", "59:00"))
+        ]
+        result = sampling_gaps(history, "a", expected_interval_seconds=60, reference_time=self.clock,
+                               expected_metrics=["hr_resting"])
+        self.assertEqual(result["stream_count"], 2)
+        self.assertEqual(len(result["historical_gaps"]), 1)
+        self.assertEqual(result["historical_gaps"][0]["source"], "one")
+        self.assertEqual(result["overdue_streams"], [])
+
+    def test_overdue_stream_and_source_filter(self):
+        history = [{"astronaut_id": "a", "metric": "hr_resting", "source": "old",
+                    "captured_at": "2026-11-22T11:58:00Z"},
+                   {"astronaut_id": "a", "metric": "hr_resting", "source": "new",
+                    "captured_at": "2026-11-22T12:00:00Z"}]
+        result = quality_report(history, "a", max_age_seconds=60, reference_time=self.clock,
+                                expected_metrics=["hr_resting"], source="old", expected_interval_seconds=60)
+        self.assertEqual(result["stale_metrics"], ["hr_resting"])
+        self.assertEqual(result["sampling"]["overdue_streams"][0]["source"], "old")
+
+    def test_invalid_cadence_is_rejected(self):
+        for interval in (0, -1, True, float("inf"), float("nan")):
+            with self.subTest(interval=interval), self.assertRaises(ValueError):
+                sampling_gaps([], "a", expected_interval_seconds=interval, reference_time=self.clock,
+                              expected_metrics=["hr_resting"])

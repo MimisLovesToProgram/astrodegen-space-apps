@@ -112,6 +112,9 @@ def main():
     quality.add_argument("--reference-time", help="Explicit aware timestamp for a synthetic replay")
     quality.add_argument("--history-limit", type=int, default=10000)
     quality.add_argument("--metrics", nargs="+", help="Expected metric names; default is the full simulator schema")
+    quality.add_argument("--source", help="Check a specific sensor source")
+    quality.add_argument("--expected-interval-seconds", type=float, help="Explicit sampling cadence for gap checks")
+    quality.add_argument("--gap-tolerance-fraction", type=float, default=0.1)
     actions.add_parser("contract", help="Show the versioned Step 1/2/3 data contract")
     handoff = actions.add_parser("handoff", help="Export versioned clean history for Step 3")
     handoff.add_argument("astronaut_id")
@@ -156,7 +159,9 @@ def main():
             reference = datetime.fromisoformat(args.reference_time.replace("Z", "+00:00")) if args.reference_time else None
             output = quality_report(store.get_history(args.astronaut_id, args.history_limit), args.astronaut_id,
                                     max_age_seconds=args.max_age_seconds, reference_time=reference,
-                                    expected_metrics=args.metrics, history_limit=args.history_limit)
+                                    expected_metrics=args.metrics, history_limit=args.history_limit,
+                                    source=args.source, expected_interval_seconds=args.expected_interval_seconds,
+                                    gap_tolerance_fraction=args.gap_tolerance_fraction)
             output["audit"] = summarize_audit(store.get_audit_summary())
             print(json.dumps(output, indent=2, allow_nan=False))
         elif args.action == "handoff":
