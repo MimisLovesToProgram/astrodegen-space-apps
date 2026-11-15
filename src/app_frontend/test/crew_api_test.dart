@@ -9,6 +9,7 @@ import 'package:app_frontend/logic/crew_api.dart';
 import 'package:app_frontend/logic/models.dart';
 import 'package:app_frontend/logic/view_models.dart';
 import 'package:app_frontend/screens/checkin_screen.dart';
+import 'package:app_frontend/screens/history_screen.dart';
 import 'package:app_frontend/screens/status_screen.dart';
 
 void main() {
@@ -135,8 +136,33 @@ void main() {
     };
     await tester.pumpWidget(const MaterialApp(home: StatusScreen()));
     await tester.pumpAndSettle();
-    expect(find.text('Unknown'), findsOneWidget);
-    expect(find.text('Green'), findsOneWidget);
+    // The sleep reading has no level, so it must not be shown as good.
+    expect(find.text('Not assessed'), findsOneWidget);
+    // Mood is green, and the day's worst assessed level is green as well.
+    expect(find.text('Good'), findsNWidgets(2));
+    expect(find.text('Symptoms'), findsNothing);
+    data.reset();
+  });
+
+  testWidgets('history screen averages real readings and symptom lists', (
+    tester,
+  ) async {
+    final data = AppData.instance;
+    data.reset();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    data.sensorData = {
+      today: {
+        'sleep_h': const MetricReading(7.0, 0),
+        'mood': const MetricReading(null, null),
+        'symptoms': const MetricReading(['headache', 'fatigue'], 1),
+        'exercise_logged': const MetricReading(true, 0),
+      },
+    };
+    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Symptoms per day'), findsWidgets);
+    expect(find.text('2'), findsWidgets);
     data.reset();
   });
 

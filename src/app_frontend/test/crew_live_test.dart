@@ -23,8 +23,9 @@ void main() {
       Map<String, Map<String, MetricReading>> history = {};
       for (var attempt = 0; attempt < 50; attempt++) {
         history = await api.history('a');
-        if (history.isNotEmpty && history.values.first['mood']?.level == 2)
+        if (history.isNotEmpty && history.values.first['mood']?.level == 2) {
           break;
+        }
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
       expect(history, hasLength(1));
