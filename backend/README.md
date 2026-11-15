@@ -73,7 +73,7 @@ Implementation references: [records APIs](https://pocketbase.io/docs/api-records
 
 Use `/home/evantampa129/astrodegen-space-apps` as the single active project directory. The local executable and the existing database were consolidated into this folder from an older clone. Its original contents are preserved in the ignored `data/backups/project-copy-before-consolidation.tar.gz` archive at the project root. Downloaded installation files remain in Downloads.
 
-The complete setup, contract, monitoring, and API test suite passes against the installed v0.42.2 executable using temporary data. The actual local database now has the Astrocrates migration applied and all three service roles configured. The original administrator was verified unchanged. A live-backend check produced 252 clean observations from 21 mission packets; follow-up replay, quarantine, and conflict checks kept the clean count at 252. The local backend is configured. Durable Step 3 jobs, assessments, escalation events, and crew APIs are implemented; the final scoring policy and frontend integration remain pending.
+The complete setup, contract, monitoring, and API test suite passes against the installed v0.42.2 executable using temporary data. The actual local database now has the Astrocrates migration applied and all three service roles configured. The original administrator was verified unchanged. A live-backend check produced 252 clean observations from 21 mission packets; follow-up replay, quarantine, and conflict checks kept the clean count at 252. The local backend is configured. Durable Step 3 jobs, assessments, escalation events, and crew APIs are implemented; the team policy is implemented with provisional bands and the Flutter client is connected; shared-device rehearsal remains pending.
 
 ## Quality reporting and Step 3 export
 
@@ -96,3 +96,13 @@ The local verification record and sample handoff exports are in ignored `data/st
 Step 3 adds `assessment_jobs`, `assessment_runs`, and `escalation_events`. The existing `domain_assessments` table stores known domain scores linked to a run. Quality monitoring uses `quality_checks` and `quality_alerts`. Workers use authenticated custom routes for job claims, completion, failure, retry, and quality updates; reader services can inspect results. Crew users can only read their linked profile and daily sensor history through the crew routes.
 
 See [assessment commands and recovery](../docs/assessment.md) and [login, sensors, and profile contracts](../docs/frontend-api.md). `--seed-demo-users` is optional and never prints generated passwords. The managed server remains bound to `127.0.0.1`; sharing it across laptops needs an explicitly configured host and network access.
+
+## Process crew check-ins
+
+The authenticated check-in API stores original user answers in the same durable inbox with source `crew_checkin`. Run a worker to validate and assess incoming answers:
+
+```bash
+PYTHONPATH=src python3 -m astrocrates process --watch --interval 1 --assessment-policy config/assessment-team.json --run-assessment
+```
+
+The team policy uses actual crew inputs for self-reported fields and the sensor stream for biometric measurements. The app may display pending/unknown until the worker completes or enough historical data exists. See the [check-in contract](../docs/frontend-api.md).

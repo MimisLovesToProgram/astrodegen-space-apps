@@ -11,3 +11,6 @@ The official challenge brief, source URL, research references, and dataset prove
 
 - [Step 3 assessment, policies, jobs, and recovery](assessment.md).
 - [Frontend login, profile, and sensor-history API](frontend-api.md).
+
+- [Preserved team health rules](team-health-rules.md).
+- [Connected Flutter client](../src/app_frontend/README.md).

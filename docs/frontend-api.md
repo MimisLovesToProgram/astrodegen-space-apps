@@ -55,4 +55,28 @@ No history returns `{}`. Missing/invalid authentication returns HTTP 401; anothe
 
 Run setup with `--seed-demo-users` to provision the three synthetic crew accounts. Private credentials are saved to ignored `.env.crew-a`, `.env.crew-b`, and `.env.crew-c`, with owner-only permissions. Existing accounts are checked rather than having their passwords reset. Do not commit or paste these files into frontend source.
 
-Flutter screens and API calls have not been modified. The frontend owner still needs to connect login, preserve the token, load crew history, and render unknown states.
+The canonical Flutter app now calls these endpoints, keeps the token in memory, displays unknown states, and scopes check-in dates per crew. A joint device/network rehearsal still needs to be completed.
+
+## Submit a check-in
+
+`POST /api/astrocrates/checkin` requires the crew user token. Example body:
+
+```json
+{
+  "crewId": "a",
+  "deliveryKey": "stable-random-key-12345",
+  "values": {
+    "sleep_h": 5.5,
+    "sleep_quality": 2,
+    "mood": 2,
+    "symptoms": ["fatigue"],
+    "exercise_logged": false,
+    "social_interaction": true,
+    "activity_pct_target": 40
+  }
+}
+```
+
+The server returns HTTP 202 with the raw packet ID, processing status, and replay flag. We derive the crew from the authenticated account and timestamp the submission on the server. The same delivery key and answers reuse the original packet; changed answers with the same key return HTTP 409. Cross-crew submissions return HTTP 403. Invalid answer types/ranges return HTTP 400. Symptom values are names, not a count; `exercise_logged` and `social_interaction` are booleans, and activity is a percentage, independent of exercise completion.
+
+The worker normalizes these packets with source `crew_checkin` and `context.simulated=false`. Synthetic packets retain source `synthetic_biosensors`. A failed response can be retried with the same delivery key. Success means the original answers are durable, not that validation and scoring have already completed.

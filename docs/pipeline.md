@@ -81,7 +81,7 @@ assessment = risk_engine.assess("a", history)
 
 The commands also export `step3_history` after processing. An explicit `--assessment-policy` queues durable work; `--run-assessment` also executes it. Without a policy, commands report `assessment_status: "not_configured"`.
 
-Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew authorization, and quality monitoring are now implemented. The team must still approve the actual scoring formulas and connect the frontend. See the [assessment guide](assessment.md), [crew API contract](frontend-api.md), and [schedule](task-plan.md). See [PocketBase setup](../backend/README.md) for collection rules and real API tests.
+Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew authorization, and quality monitoring are now implemented. The team must still review the provisional score bands and rehearse the connected frontend on its devices. See the [assessment guide](assessment.md), [crew API contract](frontend-api.md), and [schedule](task-plan.md). See [PocketBase setup](../backend/README.md) for collection rules and real API tests.
 
 ## Step 2 monitoring and configured local backend
 
