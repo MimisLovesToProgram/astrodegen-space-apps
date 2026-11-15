@@ -1,5 +1,8 @@
 import 'dart:ui';
 
+import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/screens/checkin_screen.dart';
+import 'package:app_frontend/screens/status_screen.dart';
 import 'package:flutter/material.dart';
 
 InputDecoration fieldDecoration(String label) => InputDecoration(
@@ -31,6 +34,15 @@ class _LoginScreenState extends State<LoginScreen> {
   TextEditingController passwordController = TextEditingController();
 
   bool _passwordVisible = false;
+
+  bool loggingIn = false;
+
+  @override
+  void dispose() {
+    super.dispose();
+    usernameController.dispose();
+    passwordController.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,20 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       
                           // User icon
                           Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(50),
-                              border: Border.all(color: Colors.black, width: 1.5),
-                              color: Colors.lightBlue,
-                            ),
-                      
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.white,
-                              ),
-                            ),
+                            width: 200,
+                            height: 200,
+                            child: Image.asset(
+                              "assets/logo.png",
+                              fit: BoxFit.fill,
+                            )
                           ),
                       
                           SizedBox(height: 20),
@@ -140,8 +144,34 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 120,
                             height: 60,
                             child: FilledButton(
-                              onPressed: () {
-                                
+                              onPressed: () async {
+                                setState(() {
+                                  loggingIn = true;
+                                });
+
+                                final success = await CurrentUser.instance.loginUser(usernameController.text, passwordController.text);
+
+                                setState(() {
+                                  loggingIn = false;
+                                });
+
+                                if (!context.mounted) return;
+
+                                if (success) {
+
+                                  if ( DateStorage.instance.lastDateEntered.difference( DateTime.now() ).inDays >= 1 ) {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => CheckinScreen())
+                                    );
+                                  } else {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => StatusScreen())
+                                    );
+                                  }
+                                  
+                                }
                               },
                             
                               child: Text(
@@ -150,6 +180,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+
+                          // To push the rest of the UI up
+                          SizedBox(height: 70),
                       
                         ],
                       ),
@@ -159,6 +192,40 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+
+
+          // Waiting for authentication
+          if (loggingIn)
+            Positioned.fill(
+              child: Container(
+                color: const Color.fromARGB(150, 0, 0, 0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+
+                      Text(
+                        "Waiting for authentication",
+                        style: TextStyle(fontSize: 26, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      SizedBox(height: 15),
+
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 6,
+                        )
+                      )
+
+                    ],
+                  ),
+                )
+              )
+            ),
 
         ],
       )

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart';
 
 import 'models.dart';
 
@@ -16,4 +17,10 @@ class AppData extends ChangeNotifier {
     Question(title: "Have you had any exercise today?", type: QuestionType.yesno),
     Question(title: "Have you had any social interactions today?", type: QuestionType.yesno),
   ];
+
+  Map<String, dynamic> sensorData = {};
+
+  Future<void> loadSensorData(String crewId) async {
+    await Future.delayed(Duration(seconds: 4));
+  }
 }
