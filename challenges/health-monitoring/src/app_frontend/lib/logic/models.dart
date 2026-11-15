@@ -1,6 +1,8 @@
 library;
 
 import 'package:http/http.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
 enum QuestionType {num, onetofive, yesno}
 
@@ -38,4 +40,38 @@ class CurrentUser {
 
     return true; // for success
   }
+}
+
+
+/// Singleton class for storing the last date the user opened the app (and finished the checkin)
+class DateStorage {
+
+  DateStorage._();
+
+  static DateStorage instance = DateStorage._();
+
+  /// Our instance of shared prefs
+  late SharedPreferences shPref;
+
+  late DateTime lastDateEntered;
+
+  Future<void> init() async {
+    shPref = await SharedPreferences.getInstance();
+  
+    final lastDateStr = shPref.getString("lastDate");
+    if (lastDateStr != null) {
+
+      lastDateEntered = DateFormat("yyyy-MM-dd").parse(lastDateStr);
+
+    } else {
+      lastDateEntered = DateTime.now().subtract(Duration(days: 1));
+    }
+  }
+
+  Future<void> updateLastDate() async {
+    final now = DateTime.now();
+    lastDateEntered = now;
+    await shPref.setString("lastDate", "${now.year}-${now.month}-${now.day}");
+  }
+
 }
