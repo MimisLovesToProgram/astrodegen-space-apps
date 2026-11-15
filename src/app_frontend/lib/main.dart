@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'screens/login_screen.dart';
-import 'package:app_frontend/screens/checkin_screen.dart';
 import 'logic/models.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await DateStorage.instance.init();
 
   runApp(const MainApp());
@@ -17,10 +17,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        resizeToAvoidBottomInset: false,
-        body: LoginScreen()
-      ),
+      home: Scaffold(resizeToAvoidBottomInset: false, body: LoginScreen()),
     );
   }
 }
