@@ -111,6 +111,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                     gettingSensorData = false;
                                   });
 
+                                  await DateStorage.instance.updateLastDate();
+
                                   if (!context.mounted) return;
 
                                   Navigator.pushReplacement(
@@ -149,6 +151,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                   setState(() {
                                     gettingSensorData = false;
                                   });
+
+                                  await DateStorage.instance.updateLastDate();
 
                                   if (!context.mounted) return;
 
@@ -238,12 +242,27 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             height: 50,
                             child: FilledButton(
 
-                              onPressed: () {
+                              onPressed: () async {
                                 if (currentQuestion.answer != null) {
                                 
                                   setState(() {
-                                    currentQuestionIndx++;
+                                    gettingSensorData = true;
                                   });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+                                  
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
 
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(

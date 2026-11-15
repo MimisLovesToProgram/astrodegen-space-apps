@@ -158,10 +158,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (!context.mounted) return;
 
                                 if (success) {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => CheckinScreen())
-                                  );
+
+                                  if ( DateStorage.instance.lastDateEntered.difference( DateTime.now() ).inDays >= 1 ) {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => CheckinScreen())
+                                    );
+                                  } else {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => StatusScreen())
+                                    );
+                                  }
+                                  
                                 }
                               },
                             
