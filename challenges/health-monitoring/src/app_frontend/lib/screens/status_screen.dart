@@ -1,3 +1,6 @@
+import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/screens/history_screen.dart';
+import 'package:app_frontend/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:app_frontend/logic/view_models.dart';
@@ -60,6 +63,9 @@ class StatusScreen extends StatefulWidget {
 class _StatusScreenState extends State<StatusScreen> {
   final ScrollController _todayController = ScrollController();
   final ScrollController _historyController = ScrollController();
+
+  // For the circular progress indicator
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -124,30 +130,74 @@ class _StatusScreenState extends State<StatusScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
-            onPressed: () {
-              // TODO: implement logout.
+            onPressed: () async {
+              setState(() {
+                isLoading = true;
+              });
+              final success = await CurrentUser.instance.signout();
+              setState(() {
+                isLoading = false;
+              });
+
+              if (!context.mounted) return;
+
+              if (success) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => LoginScreen())
+                );
+              }
+
             },
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Today's Status",
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Expanded(flex: 3, child: _buildTodaySection()),
-              const SizedBox(height: 16),
-              Text('Historical Status',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Expanded(flex: 2, child: _buildHistorySection()),
-            ],
+
+      body: Stack(
+        children: [
+
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Today's Status",
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Expanded(flex: 3, child: _buildTodaySection()),
+                  const SizedBox(height: 16),
+                  Text('Historical Status',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Expanded(flex: 2, child: _buildHistorySection()),
+                ],
+              ),
+            ),
           ),
-        ),
+
+          // For the loading indicator
+          Positioned.fill(
+            child: Container(
+              color: const Color.fromARGB(150, 0, 0, 0),
+              child: Column(
+                children: [
+
+                  Text("Signout..."),
+                  SizedBox(
+                    height: 50,
+                    width: 50,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 8,                      
+                    ),
+                  )
+
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -173,7 +223,7 @@ class _StatusScreenState extends State<StatusScreen> {
                 // Right padding keeps entries clear of the scrollbar.
                 padding: const EdgeInsets.fromLTRB(12, 12, 20, 12),
                 itemCount: entries.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 14),
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
                 itemBuilder: (context, i) {
                   final key = entries[i].key;
                   final cfg = entries[i].value;
@@ -202,7 +252,7 @@ class _StatusScreenState extends State<StatusScreen> {
                   value: progress,
                   minHeight: 10,
                   color: color,
-                  backgroundColor: color.withOpacity(0.2),
+                  backgroundColor: color.withValues(alpha: 0.2),
                 ),
               ),
             ),
@@ -268,7 +318,7 @@ class _StatusScreenState extends State<StatusScreen> {
                       controller: _historyController,
                       padding: const EdgeInsets.fromLTRB(12, 12, 20, 8),
                       itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 14),
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
                       itemBuilder: (context, i) {
                         final name = entries[i].key.toString();
                         final percent =
@@ -291,7 +341,7 @@ class _StatusScreenState extends State<StatusScreen> {
                                       minHeight: 10,
                                       color: color,
                                       backgroundColor:
-                                          color.withOpacity(0.2),
+                                          color.withValues(alpha: 0.2),
                                     ),
                                   ),
                                 ),
@@ -311,9 +361,10 @@ class _StatusScreenState extends State<StatusScreen> {
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
                 onPressed: () {
-                  // TODO: navigate to the full history screen, e.g.:
-                  // Navigator.push(context, MaterialPageRoute(
-                  //     builder: (_) => const HistoryScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => HistoryScreen())
+                  );
                 },
                 icon: const Text('See full history'),
                 label: const Icon(Icons.arrow_forward, size: 18),

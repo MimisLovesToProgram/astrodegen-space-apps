@@ -231,7 +231,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   value: progress,
                   minHeight: 10,
                   color: color,
-                  backgroundColor: color.withOpacity(0.2),
+                  backgroundColor: color.withValues(alpha: 0.2),
                 ),
               ),
             ),
@@ -258,7 +258,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   value: share,
                   minHeight: 10,
                   color: color,
-                  backgroundColor: color.withOpacity(0.2),
+                  backgroundColor: color.withValues(alpha: 0.2),
                 ),
               ),
             ),
@@ -342,7 +342,7 @@ class _ScrollList extends StatelessWidget {
         // Extra right padding keeps entries clear of the scrollbar.
         padding: const EdgeInsets.fromLTRB(12, 12, 20, 12),
         itemCount: children.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        separatorBuilder: (_, _) => const SizedBox(height: 14),
         itemBuilder: (_, i) => children[i],
       ),
     );
