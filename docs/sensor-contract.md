@@ -33,3 +33,7 @@ The export contains `contract_version`, `astronaut_id`, `generated_at`, `order`,
 The existing `history` command and Python callback keep their original list format. The versioned `handoff` command is an additional interface. A seven-day synthetic story has 84 observations per crew, so it fits within the default window.
 
 The contract and export are implemented and verified. Acceptance by the Step 1/Step 3 owners and integration with a real risk engine remain team handoff tasks; no health-risk calculations are included in Step 2.
+
+## Assessment results and crew delivery
+
+We now persist policy-versioned assessments and retryable jobs separately from validation outcomes. The supplied policy is explicitly synthetic-only; team-approved formulas remain pending. Unknown assessment levels are `null`, while assessed warning levels are integers 0–3. The crew API returns the latest validated value per UTC day and metric, with a warning only for the exact assessed observation. See the [assessment guide](assessment.md) and [frontend contract](frontend-api.md) for aliases, authentication, and the complete daily-history response.

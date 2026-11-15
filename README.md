@@ -8,13 +8,14 @@
 
 
 
-An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is saved, validated, and prepared for health assessment. The risk engine is still pending.
+An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is saved, validated, and prepared for health assessment. Configurable demo assessments and crew APIs are implemented; team-approved scoring and Flutter integration remain pending.
 
 ## Structure
 
 ```text
 src/
   app_frontend/   Flutter app
+  assessment/     Configurable assessment engine
   ingest_validate/ Data pipeline
   biosensors.py   Synthetic sensors
   astrocrates.py  Pipeline commands
@@ -40,4 +41,4 @@ For the shared API backend, follow the [PocketBase setup](backend/README.md).
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-See the [pipeline guide](docs/pipeline.md), [sensor contract](docs/sensor-contract.md), and [task schedule](docs/task-plan.md).
+See the [pipeline guide](docs/pipeline.md), [sensor contract](docs/sensor-contract.md), [assessment guide](docs/assessment.md), [frontend API](docs/frontend-api.md), and [task schedule](docs/task-plan.md).

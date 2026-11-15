@@ -1,65 +1,57 @@
-# Astrocrates non-UI task plan and schedule
+# Astrocrates tasks and schedule
 
-This plan excludes the existing Flutter UI and UI redesign. It covers the sensor contract, ingestion, health assessment, backend delivery, and verification. Owners and a calendar deadline have not been assigned; the schedule uses working days relative to the team's next development session. Estimates are provisional.
+This board covers the non-UI implementation and its handoff to the frontend team. We distinguish working mechanisms from team decisions that are still needed. The mission and assessment policy are synthetic demonstrations.
 
-## Task board
+| ID | Task | State | Remaining work or evidence |
+| --- | --- | --- | --- |
+| T01 | Agree official challenge requirements and demo scope | Pending team decision | Record the brief, source URL, and demo acceptance criteria |
+| T02 | Supply synthetic sensor scenarios | Implemented | Three crew members, seven days, and a noise generator |
+| T03 | Confirm real sensor semantics and time contract | Pending team decision | Confirm resting HR, RMSSD, units, sources, UTC clocks, cadence, and radiation semantics |
+| T04 | Validate measurement schema, units, clocks, and plausibility | Implemented | Invalid inputs, conversions, and valid high HR are tested |
+| T05 | Persist raw and clean data, duplicates, conflicts, and recovery | Implemented | Atomic packet processing and replay tests on SQLite and PocketBase |
+| T06 | Connect simulator to storage and validation | Implemented with documented assumptions | 21 mission packets yield 252 unique clean observations |
+| T07 | Supply clean history and a versioned assessment interface | Implemented | Configurable history, source filters, and handoff export |
+| T08 | Agree assessment formulas and expected outcomes | Pending team decision | Team notes are now published; review their mapping, windows, freshness, sources, and unknown states; demo rules are not approval |
+| T09 | Implement four-domain assessment calculations | Engine implemented; final policy pending T08 | Baselines, trends, consecutive rules, levels, and unknown states tested; fictional demo policy supplied |
+| T10 | Persist results and retry failed assessments | Implemented | Frozen inputs/policy, leases, atomic completion, idempotency, failed-job retry and attempt limits |
+| T11 | Connect capture, processing, assessment, and backend APIs | Backend implemented; frontend consumer pending | CLI connects all steps; authenticated login, profile, and full daily crew history are tested |
+| T12 | Monitor data quality and escalation conditions | Prototype implemented | Missing/stale data, per-source gaps, durable quality recovery, and orange/red transitions tested; physical calibration and external notification delivery remain pending |
+| T13 | Verify the demo and hand off to teammates | Backend verified; joint demo pending | Real PocketBase tests and local replay; frontend integration and final presentation rehearsal still needed |
 
-| ID | Task | Current state | Depends on | Completion evidence |
-| --- | --- | --- | --- | --- |
-| T01 | Record official challenge requirements and demo scope | Pending | Team decision | Brief, source URL, and agreed demo acceptance criteria |
-| T02 | Supply synthetic sensor scenarios | Implemented | — | Existing three-crew, seven-day story and noise generator |
-| T03 | Confirm sensor semantics and time contract | Pending | T02 | Confirm resting HR, HRV method, units, source IDs, UTC timestamps, cumulative radiation semantics |
-| T04 | Validate schema, units, timestamps, and plausibility | Implemented | — | Tests include invalid inputs, conversions, and valid high HR |
-| T05 | Persist raw and validated records; handle retransmissions | Implemented | T04 | Durable raw inbox, linked metric audit, clean history, duplicates/conflicts, and rollback tests on SQLite and PocketBase |
-| T06 | Connect the existing simulator to ingestion | Implemented with documented assumptions | T02, T04, T05 | 21 synthetic packets produce 252 accepted observations; repeat produces duplicates |
-| T07 | Define clean-history assessment interface | Implemented | T05, T06 | Assessor callback receives validated crew history; invalid measurements stay out |
-| T08 | Agree assessment formulas, baselines, windows, and missing-data behavior | Pending | T01, T03, T07 | Versioned assessment specification with units and expected synthetic cases |
-| T09 | Implement physiological, behavioral, immune, and bone assessment calculations | Pending | T08 | Deterministic unit tests against the agreed formulas; no medical claims beyond the prototype |
-| T10 | Persist assessment results and support failed-assessment retry | Pending | T09 | Versioned results linked to input history; retry works without re-ingesting duplicate measurements |
-| T11 | Add bounded live ingestion and backend transport | Capture, worker, and history API implemented; assessment delivery pending | T03, T07, T10 | PocketBase APIs and SQLite offline commands are tested; connect the real assessor once T09/T10 exist |
-| T12 | Add data-quality monitoring | Missing/stale metrics and per-source acceptance summaries implemented; physical sensor reliability and automated alerts pending | T03, T05 | Missing/stale data reports, quality summaries, sensor reliability rules agreed with team |
-| T13 | Verify the complete non-UI demo and handoff | Partly implemented | T09, T10, T11, T12 | Full sensor -> validation -> assessment run, replay/failure tests, setup and demo instructions |
+## Team handoff tasks
 
-T09 requires agreed formulas before implementation. A physiological change can be a valid observation and still matter to assessment; baseline deviations must not silently remove those observations from Step 3. The current adapter and assessment hook do not mean T09 is complete.
-
-## Proposed working-day schedule
-
-| Working day | Work | Dependency and exit condition |
+| Task | State | Next action |
 | --- | --- | --- |
-| Day 1 | Review current Step 1/2 connection; finish T01 and T03 | Team confirms requirements and sensor meaning; run the synthetic demo and tests |
-| Day 2 | Complete T08; define expected stable/change/missing-data cases | Assessment owner signs off on formulas, history windows, and output contract |
-| Days 3–4 | Implement T09 and T10 | Formula tests pass; assessment results are persisted and failures can be retried |
-| Day 5 | Finish the assessment portion of T11 | Existing capture/worker/history APIs connect to the implemented assessor; test durable assessment retries |
-| Day 6 | Implement T12 and finish T13 | Full non-UI replay passes, invalid data stays out of scoring, failures are recoverable |
+| Crew login API | Implemented | Frontend sends username/password and retains the returned token |
+| Sensor-history API | Implemented | Frontend sends crewId with token and handles levels 0–3 plus unknown `null` |
+| Shared database setup | Local server configured | Agree the host and explicitly configure access from teammates' machines; managed setup remains localhost |
+| UI integration | Pending frontend owner | Connect login, history, profile, and unknown-state rendering without embedding service credentials |
+| Final scoring policy | Pending assessment owner | Review the newly published team notes, map them into the executable policy, and verify expected outcomes |
+| External notifications | Pending if required by scope | Choose delivery channel and recipients before implementing outbound messages |
+| Physical sensors | Pending if required by scope | Confirm devices, authenticity, calibration, and sampling policies |
+| Repository cleanup | Partly complete | Canonical backend consolidated and runtime files untracked; review legacy challenge/idea folders with their owners before removing teammates' work |
+| Official brief and presentation | Pending team decision | Agree scope and rehearse the integrated demo |
 
-Use one responsible owner per pending task when the team assigns work. T01 and T03 can be discussed together; T09 cannot be reliably estimated until T08 is agreed. If the deadline is shorter, prioritize one agreed assessment path through T09–T11 and schedule the remaining domains explicitly rather than marking them complete.
+## Proposed next-session schedule
 
-## Current verification checkpoint
+| Order | Work | Exit condition |
+| --- | --- | --- |
+| 1 | Confirm T01/T03/T08 and choose the shared host | Agreed scope, sensor semantics, scoring policy, and connection settings |
+| 2 | Review and merge the backend feature branch through dev | Migrations and API contract reviewed; backend tests pass |
+| 3 | Frontend owner connects crew endpoints | Login and history work with a real crew token; cross-crew access fails; unknown states are visible |
+| 4 | Replace or approve the demo policy | Expected cases match the team's versioned rules |
+| 5 | Run the full team demo and recovery checks | Capture → validation → assessment → UI works; retries do not duplicate results |
 
-The repository includes automated validation/storage tests and integration tests using the actual simulator functions. The connected synthetic mission covers all three crew members and all twelve emitted metrics, including symptoms and mission day. Callback tests verify the Step 3 contract; they are not tests of a health-risk engine. No UI changes are part of this plan.
+These are dependency-ordered tasks, not assigned calendar deadlines. Team owners still need to agree delivery dates.
 
-## Folder and backend checkpoint
+## Verification
 
-The project now uses a single Astrocrates layout: `src/` (with the Flutter app in `src/app_frontend/`), `backend/`, `tests/`, and `docs/`. Step 1 saves timestamped packets before validation. Step 2 uses bounded, recoverable processing with atomic results and completion markers. Shared PocketBase APIs and offline SQLite use the same clean observation contract. The original simulator and Flutter source are preserved. Risk calculations and UI integration are still pending.
+The full suite contains 91 tests, including isolated real-PocketBase servers, all three crew histories, permission boundaries, API response types, rate limiting, source filtering, job leases, retries, escalation deduplication, and backfills. It runs without changing the team's active database. The standard-library-only run skips PocketBase tests unless `POCKETBASE_TEST_BINARY` is set.
 
-## Step 2 handoff checklist
+The original administrator, raw sensor deliveries, and validated observations are preserved during local setup. Generated binaries, databases, credentials, logs, and verification artifacts remain ignored. See the [assessment guide](assessment.md), [frontend API contract](frontend-api.md), and [backend setup](../backend/README.md). Frontend source was not changed by this implementation.
 
-The Step 2 implementation is complete for the synthetic prototype. Validation, unit conversion, raw capture, clean storage, duplicate/conflict handling, recovery, APIs, and the Step 3 data interface are implemented. The local backend and the isolated integration suite are verified with PocketBase v0.42.2.
+## New team specification
 
-The remaining work for the Step 2 owner is:
+The latest team commit publishes `astronaut_health_monitoring_system_data.md` and data tables in `backend/src/health_data.py`. We must reconcile these with the executable policy before claiming the notes-based assessment is complete. The team file is preserved. Its `assesmentEngine.py` currently prints a startup message; the runnable implementation in this branch is `src/assessment/`. We should agree one entry point before retiring either path.
 
-- [ ] Confirm the sensor contract with the Step 1 owner: resting HR, HRV method, units, source identifiers, timestamp policy, and sampling frequency (T03).
-- [x] Apply the committed migrations to the actual local PocketBase database and start the local service.
-- [x] Configure ingest/worker/reader accounts with private local environment files; preserve the existing administrator.
-- [x] Verify capture -> process -> history against the actual backend: 21 mission packets, 252 clean observations, 252 replay duplicates, one quarantine, and one preserved conflict.
-- [x] Publish a versioned observation contract, configurable history export, and sample handoff data.
-- [ ] Review the prototype sensor mappings and required history window with the Step 1 and Step 3 owners (T03/T08).
-- [ ] Connect the real assessment engine when T09 is available, then verify failure and retry behavior (T10/T11/T13).
-
-Missing/stale metric reporting and per-source data acceptance summaries (T12) are implemented. Physical sensor reliability, interval-gap policies, and automated alert delivery remain additional work. Risk formulas, baseline assessment calculations, and persistent risk results are not implemented and belong to Step 3. The existing UI is outside this owner's implementation scope; live UI/backend integration is still pending.
-
-## Latest Step 2 checkpoint
-
-The actual local PocketBase service is configured, with no pending packets after verification. The synthetic mission and follow-up audit checks leave 44 processed deliveries and 252 unique clean observations. Quality reporting and versioned Step 3 exports work through the CLI. The original administrator is preserved, temporary setup administrators are removed, and credentials/runtime data remain ignored by Git.
-
-Remaining dependencies are team agreement on real sensor semantics/history windows and the Step 3 assessment implementation. Step 2 does not implement risk formulas, persistent assessment jobs, or UI integration. Inline explanatory comments cover the non-frontend programs and tests; frontend files were not changed.
+Specific decisions remain: daily streaks versus reading counts, a seven-day baseline with incomplete early history, elapsed time without social/exercise logs, activity percentage versus a boolean exercise log, and the yellow/red score boundaries (the notes define escalation thresholds but not all four score bands). The existing demo policy remains explicitly separate.

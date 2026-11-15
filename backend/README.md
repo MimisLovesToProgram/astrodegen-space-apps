@@ -9,7 +9,7 @@ The executable is installed at `backend/pocketbase`. On a fresh installation, cr
 From the repository root, while the local server is stopped:
 
 ```bash
-PYTHONPATH=src python3 -m ingest_validate.setup
+PYTHONPATH=src python3 -m ingest_validate.setup --seed-demo-users
 ```
 
 Setup backs up an existing database, applies migrations, starts PocketBase at `http://127.0.0.1:8090`, and provisions ingest/worker/reader accounts. It uses a temporary provisioning administrator, then removes that account. The original administrator's credentials are unchanged. A rerun reuses existing service credentials and refuses an occupied port instead of replacing a running server.
@@ -44,7 +44,7 @@ For a single demo command, use `capture --interval 0 --process`. For continuous 
 | `validation_results` | Per-metric status and reasons, related to the original packet | Worker reads; commit route writes |
 | `validated_observations` | Unique normalized observations and provenance | Worker and reader services read; commit route writes |
 
-`ingest` accounts can capture only. `worker` accounts can capture, process, and read. `reader` accounts can read clean history. Collection mutation is locked outside the custom routes. These are backend service roles, not the future crew-specific Flutter login model; no frontend credentials or code were changed.
+`ingest` accounts can capture only. `worker` accounts can capture, process, and read. `reader` accounts can read clean history. Collection mutation is locked outside the custom routes. Crew logins use a separate `users` collection linked to an astronaut profile. Optional demo crew credentials are generated in private `.env.crew-a`, `.env.crew-b`, and `.env.crew-c` files. Frontend source is unchanged.
 
 - `POST /api/astrocrates/capture` persists a packet without measurement validation. A producer-scoped `delivery_key` makes network retries idempotent. The Python client retries a transient capture failure once using the same key; callers can supply a stable key for a later retry. Replaying with a new key records a new delivery, then Step 2 detects duplicate observations.
 - `POST /api/astrocrates/commit` saves all metric outcomes, new clean observations, and the processed marker in one transaction. Concurrent workers cannot commit a packet twice. The route trusts the authenticated Python worker's data-quality validation.
@@ -73,7 +73,7 @@ Implementation references: [records APIs](https://pocketbase.io/docs/api-records
 
 Use `/home/evantampa129/astrodegen-space-apps` as the single active project directory. The local executable and the existing database were consolidated into this folder from an older clone. Its original contents are preserved in the ignored `data/backups/project-copy-before-consolidation.tar.gz` archive at the project root. Downloaded installation files remain in Downloads.
 
-The complete setup, contract, monitoring, and API test suite passes against the installed v0.42.2 executable using temporary data. The actual local database now has the Astrocrates migration applied and all three service roles configured. The original administrator was verified unchanged. A live-backend check produced 252 clean observations from 21 mission packets; follow-up replay, quarantine, and conflict checks kept the clean count at 252. The local backend is configured; Step 3 assessment is still pending.
+The complete setup, contract, monitoring, and API test suite passes against the installed v0.42.2 executable using temporary data. The actual local database now has the Astrocrates migration applied and all three service roles configured. The original administrator was verified unchanged. A live-backend check produced 252 clean observations from 21 mission packets; follow-up replay, quarantine, and conflict checks kept the clean count at 252. The local backend is configured. Durable Step 3 jobs, assessments, escalation events, and crew APIs are implemented; the final scoring policy and frontend integration remain pending.
 
 ## Quality reporting and Step 3 export
 
@@ -90,3 +90,9 @@ The quality command reports missing expected metrics, stale readings, future-clo
 Per-source data acceptance rate is `accepted / (accepted + quarantined + conflicts)`. Duplicates are reported separately and cannot inflate the rate. This is a data-quality indicator, not a clinical score or calibrated sensor-reliability estimate.
 
 The local verification record and sample handoff exports are in ignored `data/step2-verification.json`, `data/observation-contract-v1.json`, and `data/step3-history-a.json`. Original mission packets plus follow-up audit checks currently account for 44 processed deliveries and 252 clean observations. These are synthetic demo records. See the [versioned sensor contract](../docs/sensor-contract.md) for the Step 1/2/3 boundary.
+
+## Assessment and crew APIs
+
+Step 3 adds `assessment_jobs`, `assessment_runs`, and `escalation_events`. The existing `domain_assessments` table stores known domain scores linked to a run. Quality monitoring uses `quality_checks` and `quality_alerts`. Workers use authenticated custom routes for job claims, completion, failure, retry, and quality updates; reader services can inspect results. Crew users can only read their linked profile and daily sensor history through the crew routes.
+
+See [assessment commands and recovery](../docs/assessment.md) and [login, sensors, and profile contracts](../docs/frontend-api.md). `--seed-demo-users` is optional and never prints generated passwords. The managed server remains bound to `127.0.0.1`; sharing it across laptops needs an explicitly configured host and network access.

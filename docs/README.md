@@ -8,3 +8,6 @@ The official challenge brief, source URL, research references, and dataset prove
 - [PocketBase setup and API boundaries](../backend/README.md).
 
 - [Versioned sensor and assessment handoff contract](sensor-contract.md).
+
+- [Step 3 assessment, policies, jobs, and recovery](assessment.md).
+- [Frontend login, profile, and sensor-history API](frontend-api.md).
