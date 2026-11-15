@@ -49,6 +49,27 @@ Canonical ingestion names remain in the database. The response aliases `hrv_rmss
 
 No history returns `{}`. Missing/invalid authentication returns HTTP 401; another crew member's ID returns HTTP 403. Response headers include `X-Assessment-Status`, `X-Assessment-Mode`, and `X-Unknown-Metrics`. The demo mode is `synthetic_demo`. Set `ASTROCRATES_POLICY_ID` on the server to restrict displayed assessments to a particular policy if multiple policies are used.
 
+## Domain scores
+
+`POST /api/astrocrates/domains`, with the authorization header and `{"crewId":"a"}`, returns the four domains from the crew member's latest assessment:
+
+```json
+{
+  "assessedAt": "2026-11-15T12:00:00.000000Z",
+  "mode": "synthetic_demo",
+  "domains": {
+    "cardiovascular": {"score": 55, "level": 2, "complete": true, "lowerBound": false},
+    "immune": {"score": 70, "level": 2, "complete": false, "lowerBound": true},
+    "behavioral": {"score": 0, "level": 0, "complete": true, "lowerBound": false},
+    "bone_loss": {"score": null, "level": null, "complete": false, "lowerBound": false}
+  }
+}
+```
+
+This illustrates the contract, not a particular stored assessment. `score` is the configured risk points from 0 to 100, where higher is worse. It is not a health percentage or a probability. `level` uses the same 0–3 scale as the sensor history. When a domain could not be assessed, both `score` and `level` are `null`, and the UI must show it as unknown. `lowerBound=true` means some inputs were missing, but the known points already prove at least this score and level. Before any assessment exists, the response is `{"assessedAt":null,"mode":"unassessed","domains":{}}`.
+
+We pick the latest run by assessment time, using the same order as the sensor history, and respect `ASTROCRATES_POLICY_ID` in the same way. Ownership checks match `/sensors`: another crew member's ID returns HTTP 403 and a missing token returns HTTP 401.
+
 ## Profile and local demo users
 
 `GET /api/astrocrates/me` returns `crewId`, `name`, and current `status` for the authenticated user. We keep profile fields out of the date-keyed sensors response.

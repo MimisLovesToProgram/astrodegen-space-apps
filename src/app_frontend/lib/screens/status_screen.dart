@@ -32,10 +32,11 @@ class _MetricConfig {
   const _MetricConfig(this.label, this.kind, {this.max = 1, this.unit = ''});
 }
 
-/// Keys match the field names returned by the crew history API.
+/// Keys match the field names returned by the crew history API, including its
+/// aliases `hrv`, `sleep_q`, and `social_interactions`.
 /// Order = display order.
 const Map<String, _MetricConfig> _metricConfigs = {
-  'hrr': _MetricConfig(
+  'hr_resting': _MetricConfig(
     'Resting heart rate',
     _MetricKind.progress,
     max: 150,
@@ -61,7 +62,7 @@ const Map<String, _MetricConfig> _metricConfigs = {
     unit: 'mSv',
   ),
   'sleep_h': _MetricConfig('Sleep hours', _MetricKind.number, unit: 'h'),
-  'sleep_quality': _MetricConfig('Sleep quality', _MetricKind.progress, max: 5),
+  'sleep_q': _MetricConfig('Sleep quality', _MetricKind.progress, max: 5),
   'mood': _MetricConfig('Mood', _MetricKind.progress, max: 5),
   'activity_pct_target': _MetricConfig(
     'Activity vs target',
@@ -71,10 +72,18 @@ const Map<String, _MetricConfig> _metricConfigs = {
   ),
   'symptoms': _MetricConfig('Symptoms', _MetricKind.list),
   'exercise_logged': _MetricConfig('Exercise today', _MetricKind.yesNo),
-  'social_interaction': _MetricConfig(
+  'social_interactions': _MetricConfig(
     'Social interaction today',
     _MetricKind.yesNo,
   ),
+};
+
+/// Display names for the four assessment domains, in display order.
+const Map<String, String> _domainLabels = {
+  'cardiovascular': 'Cardiovascular',
+  'immune': 'Immune',
+  'behavioral': 'Behavioral',
+  'bone_loss': 'Bone loss',
 };
 
 class StatusScreen extends StatefulWidget {
@@ -142,16 +151,6 @@ class _StatusScreenState extends State<StatusScreen> {
 
   String _statusLabel(int? status) =>
       status == null ? _unknownLabel : _statusLabels[status];
-
-  /// The worst assessed level of a day, or null if nothing was assessed.
-  int? _worstLevel(Map<String, MetricReading> day) {
-    int? worst;
-    for (final reading in day.values) {
-      final level = reading.level;
-      if (level != null && (worst == null || level > worst)) worst = level;
-    }
-    return worst;
-  }
 
   String _fmt(num n) =>
       n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(1);
@@ -225,7 +224,7 @@ class _StatusScreenState extends State<StatusScreen> {
                   Expanded(flex: 3, child: _buildTodaySection(latest)),
                   const SizedBox(height: 16),
                   Text(
-                    'Recent Days',
+                    'Health Domains',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
@@ -233,8 +232,8 @@ class _StatusScreenState extends State<StatusScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'Prototype assessments based on simulated data. '
-                    'Grey means the reading has not been assessed yet '
-                    'or required data is missing.',
+                    'Domain bars show risk points, where higher is worse. '
+                    'Grey means not assessed yet or required data is missing.',
                     style: TextStyle(fontSize: 12),
                   ),
                 ],
@@ -359,46 +358,44 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Recent days
+  // Health domains
   // ---------------------------------------------------------------------------
 
   Widget _buildHistorySection() {
-    final days = _daysNewestFirst().take(7).toList();
+    final domains = AppData.instance.domains;
+    final assessedAt = AppData.instance.domainsAssessedAt;
 
     return _SectionCard(
       child: Column(
         children: [
           Expanded(
-            child: days.isEmpty
-                ? const Center(child: Text('No data available'))
+            child: domains.isEmpty
+                ? const Center(child: Text('No assessment yet'))
                 : Scrollbar(
                     controller: _historyController,
                     thumbVisibility: true,
-                    child: ListView.separated(
+                    child: ListView(
                       controller: _historyController,
                       padding: const EdgeInsets.fromLTRB(12, 12, 20, 8),
-                      itemCount: days.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final day = AppData.instance.sensorData[days[i]]!;
-                        final level = _worstLevel(day);
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                days[i],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                      children: [
+                        if (assessedAt != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              'Assessed ${assessedAt.substring(0, 16).replaceFirst('T', ' ')} UTC',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        for (final entry in _domainLabels.entries)
+                          if (domains[entry.key] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: _buildDomain(
+                                entry.value,
+                                domains[entry.key]!,
                               ),
                             ),
-                            _StatusChip(
-                              label: _statusLabel(level),
-                              color: _statusColor(level),
-                            ),
-                          ],
-                        );
-                      },
+                      ],
                     ),
                   ),
           ),
@@ -420,6 +417,45 @@ class _StatusScreenState extends State<StatusScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDomain(String label, DomainScore domain) {
+    final color = _statusColor(domain.level);
+    final score = domain.score;
+    // A lower-bound score means some inputs were missing, but the known points
+    // already prove at least this warning level.
+    final scoreText = score == null
+        ? 'Not assessed'
+        : '${domain.lowerBound ? 'at least ' : ''}${_fmt(score)} / 100 risk points';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            _StatusChip(label: _statusLabel(domain.level), color: color),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: score == null ? 0 : (score / 100).clamp(0.0, 1.0).toDouble(),
+            minHeight: 10,
+            color: color,
+            backgroundColor: color.withValues(alpha: 0.2),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(scoreText, style: const TextStyle(fontSize: 12)),
+      ],
     );
   }
 }

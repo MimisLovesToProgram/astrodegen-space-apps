@@ -27,6 +27,45 @@ class MetricReading {
   }
 }
 
+/// One health domain from the latest assessment. The score is configured risk
+/// points from 0 to 100, where higher is worse. A null level means the domain
+/// has not been assessed or required data is missing.
+class DomainScore {
+  const DomainScore(
+    this.score,
+    this.level, {
+    this.complete = false,
+    this.lowerBound = false,
+  });
+  final num? score;
+  final int? level;
+  final bool complete;
+  final bool lowerBound;
+
+  factory DomainScore.fromJson(dynamic input) {
+    if (input is! Map<String, dynamic>) {
+      throw const CrewApiException('The server returned an invalid domain.');
+    }
+    final score = input['score'];
+    final level = input['level'];
+    final validLevel =
+        level == null || (level is int && level >= 0 && level <= 3);
+    final validScore =
+        score == null || (score is num && score >= 0 && score <= 100);
+    // We reject a half-known domain, so the app never shows a score without
+    // its warning level or the other way around.
+    if (!validLevel || !validScore || (score == null) != (level == null)) {
+      throw const CrewApiException('The server returned an invalid domain.');
+    }
+    return DomainScore(
+      score as num?,
+      level as int?,
+      complete: input['complete'] == true,
+      lowerBound: input['lowerBound'] == true,
+    );
+  }
+}
+
 class CrewApi {
   CrewApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
@@ -124,6 +163,21 @@ class CrewApi {
   }
 
   Future<Map<String, dynamic>> profile() => _request('me');
+
+  /// Returns the latest assessment time (null if none yet) and its domains.
+  Future<(String?, Map<String, DomainScore>)> domains(String crewId) async {
+    final json = await _request('domains', body: {'crewId': crewId});
+    final assessedAt = json['assessedAt'];
+    final domains = json['domains'];
+    if ((assessedAt != null && assessedAt is! String) ||
+        domains is! Map<String, dynamic>) {
+      throw const CrewApiException('The domain response is invalid.');
+    }
+    return (
+      assessedAt as String?,
+      domains.map((name, input) => MapEntry(name, DomainScore.fromJson(input))),
+    );
+  }
 
   Future<void> checkin(
     String crewId,

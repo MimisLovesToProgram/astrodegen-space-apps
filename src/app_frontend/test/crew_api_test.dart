@@ -83,6 +83,43 @@ void main() {
   });
 
   test(
+    'domain scores keep unknown domains and reject half-known ones',
+    () async {
+      final api = CrewApi(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/login')) {
+            return http.Response('{"crewId":"a","token":"token"}', 200);
+          }
+          expect(request.url.path, endsWith('/domains'));
+          expect(jsonDecode(request.body), {'crewId': 'a'});
+          return http.Response(
+            '{"assessedAt":"2026-11-15T12:00:00Z","mode":"synthetic_demo",'
+            '"domains":{"cardiovascular":{"score":45,"level":1,"complete":true,'
+            '"lowerBound":false},"immune":{"score":null,"level":null,'
+            '"complete":false,"lowerBound":false}}}',
+            200,
+          );
+        }),
+      );
+      await api.login('crew_a', 'right');
+      final (assessedAt, domains) = await api.domains('a');
+      expect(assessedAt, '2026-11-15T12:00:00Z');
+      expect(domains['cardiovascular']!.score, 45);
+      expect(domains['cardiovascular']!.level, 1);
+      expect(domains['immune']!.level, isNull);
+      expect(domains['immune']!.score, isNull);
+      expect(
+        () => DomainScore.fromJson({'score': 10, 'level': null}),
+        throwsA(isA<CrewApiException>()),
+      );
+      expect(
+        () => DomainScore.fromJson({'score': 10, 'level': 5}),
+        throwsA(isA<CrewApiException>()),
+      );
+    },
+  );
+
+  test(
     'check-in submits symptom names, activity percentage, and stable key',
     () async {
       final api = CrewApi(
@@ -138,9 +175,36 @@ void main() {
     await tester.pumpAndSettle();
     // The sleep reading has no level, so it must not be shown as good.
     expect(find.text('Not assessed'), findsOneWidget);
-    // Mood is green, and the day's worst assessed level is green as well.
-    expect(find.text('Good'), findsNWidgets(2));
+    expect(find.text('Good'), findsOneWidget);
     expect(find.text('Symptoms'), findsNothing);
+    expect(find.text('No assessment yet'), findsOneWidget);
+    data.reset();
+  });
+
+  testWidgets('domain card shows risk points and unknown domains in grey', (
+    tester,
+  ) async {
+    final data = AppData.instance;
+    data.reset();
+    // We use a phone-sized tall screen so every domain row is built.
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    data.domainsAssessedAt = '2026-11-15T12:00:00Z';
+    data.domains = {
+      'cardiovascular': const DomainScore(55, 2, complete: true),
+      'immune': const DomainScore(70, 2, lowerBound: true),
+      'behavioral': const DomainScore(null, null),
+    };
+    await tester.pumpWidget(const MaterialApp(home: StatusScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Cardiovascular'), findsOneWidget);
+    expect(find.text('55 / 100 risk points'), findsOneWidget);
+    expect(find.text('at least 70 / 100 risk points'), findsOneWidget);
+    expect(find.text('Warning'), findsNWidgets(2));
+    // The unknown domain shows "Not assessed" on its chip and its score line.
+    expect(find.text('Not assessed'), findsNWidgets(2));
+    expect(find.text('Assessed 2026-11-15 12:00 UTC'), findsOneWidget);
     data.reset();
   });
 

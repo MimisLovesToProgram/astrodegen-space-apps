@@ -477,6 +477,32 @@ class PocketBaseTests(unittest.TestCase):
             self.assertEqual(client.request("GET", "/api/astrocrates/me")["status"], "red")
         self.assertEqual(len(self.worker.list_escalations()), 4)
 
+    def test_domain_scores_use_latest_assessment_and_keep_unknowns(self):
+        client, _, _, _ = self.crew_login()
+        empty = client.request("POST", "/api/astrocrates/domains", {"crewId": "a"})
+        self.assertEqual(empty, {"assessedAt": None, "mode": "unassessed", "domains": {}})
+        policy = sample_policy()
+        policy["domains"]["immune"]["rules"][0]["metric"] = "spo2"
+        for day, value in ((5, 95), (6, 60)):
+            job = self.worker.enqueue_assessment([observation(value, day=day)], "a", policy,
+                as_of=datetime(2026, 11, day, 12, tzinfo=timezone.utc))
+            self.assertEqual(run_jobs(self.worker, job_id=job["id"])["failed"], [])
+        response = client.request("POST", "/api/astrocrates/domains", {"crewId": "a"})
+        self.assertTrue(response["assessedAt"].startswith("2026-11-06T12:00:00"))
+        self.assertEqual(response["mode"], "synthetic_demo")
+        self.assertEqual(set(response["domains"]), {"cardiovascular", "immune", "behavioral", "bone_loss"})
+        # The newer day has a normal heart rate, so the older warning is gone.
+        self.assertEqual(response["domains"]["cardiovascular"],
+                         {"score": 0, "level": 0, "complete": True, "lowerBound": False})
+        # Immune needs SpO2, which we never sent. It must stay unknown, not green.
+        self.assertEqual(response["domains"]["immune"],
+                         {"score": None, "level": None, "complete": False, "lowerBound": False})
+        with self.assertRaises(PocketBaseError) as error:
+            client.request("POST", "/api/astrocrates/domains", {"crewId": "b"})
+        self.assertEqual(error.exception.status, 403)
+        with self.assertRaises(PocketBaseError):
+            PocketBaseTelemetry(self.url).request("POST", "/api/astrocrates/domains", {"crewId": "a"})
+
     def test_incomplete_domain_still_emits_confirmed_escalation(self):
         policy = sample_policy()
         policy["domains"]["immune"]["rules"].append({

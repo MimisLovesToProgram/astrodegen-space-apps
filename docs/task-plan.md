@@ -25,7 +25,7 @@ This board covers the pipeline, backend, connected Flutter client, and remaining
 | Crew login API | Implemented | Connected Flutter client sends username/password and retains its crew token in memory |
 | Sensor-history API | Implemented | Connected Flutter client sends crewId with token and displays levels 0–3 plus unknown `null` |
 | Shared database setup | Local server configured | Agree the host and explicitly configure access from teammates' machines; managed setup remains localhost |
-| UI integration | Implemented; device rehearsal pending | Real login/history/profile/check-in calls; the team's dashboard and history screens read typed readings and show unassessed values in grey; per-domain scores are not exposed by the API yet; verify on the team devices |
+| UI integration | Implemented; device rehearsal pending | Real login/history/profile/check-in calls; the team's dashboard and history screens read typed readings and show unassessed values in grey; the dashboard shows the latest per-domain risk points from `/api/astrocrates/domains`; verify on the team devices |
 | Final scoring policy | Implemented provisionally | Source-note rules are executable; review color bands and the documented reporting assumptions |
 | External notifications | Pending if required by scope | Choose delivery channel and recipients before implementing outbound messages |
 | Physical sensors | Pending if required by scope | Confirm devices, authenticity, calibration, and sampling policies |

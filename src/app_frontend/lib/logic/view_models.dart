@@ -50,6 +50,8 @@ class AppData extends ChangeNotifier {
 
   Map<String, Map<String, MetricReading>> sensorData = {};
   Map<String, dynamic> profile = {};
+  Map<String, DomainScore> domains = {};
+  String? domainsAssessedAt;
   String? notice;
   String? _deliveryKey;
   String? _answers;
@@ -57,6 +59,8 @@ class AppData extends ChangeNotifier {
   void reset() {
     sensorData = {};
     profile = {};
+    domains = {};
+    domainsAssessedAt = null;
     notice = null;
     _deliveryKey = null;
     _answers = null;
@@ -68,8 +72,13 @@ class AppData extends ChangeNotifier {
   Future<void> loadSensorData(String crewId) async {
     final history = await CurrentUser.instance.api.history(crewId);
     final crew = await CurrentUser.instance.api.profile();
+    final (assessedAt, latestDomains) = await CurrentUser.instance.api.domains(
+      crewId,
+    );
     sensorData = history;
     profile = crew;
+    domains = latestDomains;
+    domainsAssessedAt = assessedAt;
     notifyListeners();
   }
 

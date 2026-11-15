@@ -59,11 +59,23 @@ module.exports.me = (e) => {
   return e.json(200, {crewId: crewId(crew), name: crew.getString("name"), status: crew.getString("status")});
 };
 
-module.exports.sensors = (e) => {
+// We let a crew user read only their own records, whether the request names
+// the public crew ID or the internal profile record ID.
+function ownedProfile(e) {
   const crew = profile(e);
   const id = crewId(crew);
   const requested = e.requestInfo().body.crewId;
   if (typeof requested !== "string" || !requested) throw new BadRequestError("crewId is required");
   if (requested !== id && requested !== crew.id) throw new ForbiddenError("This account cannot read another crew member");
-  return require(__hooks + "/crew_history.js").response(e, crew, id);
+  return {crew: crew, id: id};
+}
+
+module.exports.sensors = (e) => {
+  const owned = ownedProfile(e);
+  return require(__hooks + "/crew_history.js").response(e, owned.crew, owned.id);
+};
+
+module.exports.domains = (e) => {
+  const owned = ownedProfile(e);
+  return require(__hooks + "/crew_domains.js").response(e, owned.crew, owned.id);
 };

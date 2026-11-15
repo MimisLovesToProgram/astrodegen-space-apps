@@ -34,6 +34,11 @@ void main() {
       expect(fields['activity_pct_target']!.value, 40);
       expect(fields['mood']!.level, 2);
       expect((await api.profile())['status'], 'orange');
+      final (assessedAt, domains) = await api.domains('a');
+      expect(assessedAt, isNotNull);
+      expect(domains.keys, containsAll(['cardiovascular', 'behavioral']));
+      expect(domains.values.any((domain) => domain.level == 2), isTrue);
+      await expectLater(api.domains('b'), throwsA(isA<CrewApiException>()));
       await expectLater(api.history('b'), throwsA(isA<CrewApiException>()));
     },
     skip: url.isEmpty
