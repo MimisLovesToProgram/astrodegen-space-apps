@@ -129,12 +129,17 @@ class PocketBaseTelemetry:
                 summary[key].extend(result["ingestion"][key])
         return {"packet_ids": processed, "ingestion": summary}
 
-    def get_history(self, astronaut_id, limit=250):
+    def get_history(self, astronaut_id, limit=250, *, source=None):
         """Read the same normalized observation contract used by local Step 3."""
         if not isinstance(astronaut_id, str) or not astronaut_id.strip():
             raise ValueError("astronaut_id is required")
         if type(limit) is not int or not 1 <= limit <= 10000:
             raise ValueError("limit must be an integer between 1 and 10000")
+        if source is not None and (not isinstance(source, str) or not source.strip()):
+            raise ValueError("source must be a nonempty string")
+        filters = "astronaut_id=" + json_string(astronaut_id)
+        if source is not None:
+            filters += " && observation.source=" + json_string(source)
         history = []
         page = 1
         page_size = min(limit, 500)
@@ -142,7 +147,7 @@ class PocketBaseTelemetry:
             # PocketBase paginates records; unwrap only normalized observations
             # and respect the caller's limit rather than returning API metadata.
             records = self.request("GET", "/api/collections/validated_observations/records", query={
-                "filter": "astronaut_id=" + json_string(astronaut_id),
+                "filter": filters,
                 "sort": "-captured_at,-id", "perPage": page_size, "page": page, "skipTotal": "true",
             })["items"]
             history.extend(record["observation"] for record in records)

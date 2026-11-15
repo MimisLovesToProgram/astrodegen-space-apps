@@ -94,7 +94,7 @@ def _ingest_on_connection(connection, measurements, *, received_at, reference_ti
     return summary
 
 
-def get_validated_observations(db_path, astronaut_id, limit=100):
+def get_validated_observations(db_path, astronaut_id, limit=100, *, source=None):
     """Return a crew member's clean history, newest first, for Step 3.
 
     quality_flags describe transformations, not medical risk or verified sensor
@@ -104,13 +104,17 @@ def get_validated_observations(db_path, astronaut_id, limit=100):
         raise ValueError("astronaut_id is required")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10000:
         raise ValueError("limit must be an integer between 1 and 10000")
+    if source is not None and (not isinstance(source, str) or not source.strip()):
+        raise ValueError("source must be a nonempty string")
+    source_filter = " AND source = ?" if source is not None else ""
+    parameters = (astronaut_id, source, limit) if source is not None else (astronaut_id, limit)
     with closing(connect_database(db_path)) as connection:
         rows = connection.execute(
             """SELECT astronaut_id, metric, captured_at, source, unit,
                       value_json, context_json, quality_flags_json
-               FROM validated_observations WHERE astronaut_id=?
+               FROM validated_observations WHERE astronaut_id=?""" + source_filter + """
                ORDER BY captured_at DESC, id DESC LIMIT ?""",
-            (astronaut_id, limit),
+            parameters,
         ).fetchall()
     return [
         {"astronaut_id": row[0], "metric": row[1], "captured_at": row[2],

@@ -23,9 +23,9 @@ class LocalTelemetry:
         from ingest_validate.worker import validate_pending_packets
         return validate_pending_packets(self.db_path, limit=limit)
 
-    def get_history(self, astronaut_id, limit=250):
+    def get_history(self, astronaut_id, limit=250, *, source=None):
         from ingest_validate.service import get_validated_observations
-        return get_validated_observations(self.db_path, astronaut_id, limit)
+        return get_validated_observations(self.db_path, astronaut_id, limit, source=source)
 
     def get_audit_summary(self):
         from contextlib import closing
@@ -150,10 +150,12 @@ def main():
     handoff.add_argument("--limit", type=int, default=250)
     from assessment.cli import COMMANDS as ASSESSMENT_COMMANDS, execute as execute_assessment, register_commands
     register_commands(actions)
+    from ingest_validate.monitor import COMMANDS as MONITOR_COMMANDS, execute as execute_monitor, register_commands as register_monitor
+    register_monitor(actions)
     args = parser.parse_args()
     if hasattr(args, "interval") and (not math.isfinite(args.interval) or args.interval < 0):
         parser.error("--interval must be finite and nonnegative")
-    if args.action in {"process", "assessment-worker"} and args.watch and args.interval == 0:
+    if args.action in {"process", "assessment-worker", "monitor"} and args.watch and args.interval == 0:
         parser.error("--watch requires a positive --interval")
     if args.action == "contract":
         from ingest_validate.contract import observation_contract
@@ -178,7 +180,9 @@ def main():
     else:
         store = LocalTelemetry(args.db)
     try:
-        if args.action in ASSESSMENT_COMMANDS:
+        if args.action in MONITOR_COMMANDS:
+            execute_monitor(args, store)
+        elif args.action in ASSESSMENT_COMMANDS:
             execute_assessment(args, store)
         elif args.action == "capture":
             for tick, (packets, clock, assume_utc) in enumerate(sensor_batches(args.mode, args.ticks)):
@@ -203,7 +207,7 @@ def main():
         elif args.action == "quality":
             from ingest_validate.quality import quality_report, summarize_audit
             reference = datetime.fromisoformat(args.reference_time.replace("Z", "+00:00")) if args.reference_time else None
-            output = quality_report(store.get_history(args.astronaut_id, args.history_limit), args.astronaut_id,
+            output = quality_report(store.get_history(args.astronaut_id, args.history_limit, source=args.source), args.astronaut_id,
                                     max_age_seconds=args.max_age_seconds, reference_time=reference,
                                     expected_metrics=args.metrics, history_limit=args.history_limit,
                                     source=args.source, expected_interval_seconds=args.expected_interval_seconds,

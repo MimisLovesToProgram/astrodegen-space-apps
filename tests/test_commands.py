@@ -56,6 +56,33 @@ class CommandTests(unittest.TestCase):
             parsed = datetime.fromisoformat(packet["timestamp"])
             self.assertEqual(parsed.utcoffset().total_seconds(), 0)
 
+    def test_monitor_alerts_recover_and_watch_is_bounded(self):
+        from datetime import timezone
+        from ingest_validate import ingest_batch
+        root = Path(__file__).resolve().parents[1]
+        env = dict(os.environ, PYTHONPATH=str(root / "src"))
+        with tempfile.TemporaryDirectory() as directory:
+            db = str(Path(directory) / "alerts.sqlite")
+            base = [sys.executable, "-m", "astrocrates", "--backend", "sqlite", "--db", db]
+            def run(*arguments):
+                return json.loads(subprocess.check_output([*base, *arguments], env=env, cwd=root))
+            options = ["monitor", "a", "--metrics", "spo2", "--source", "sensor", "--max-age-seconds", "60", "--policy", "test"]
+            first = run(*options, "--reference-time", "2026-11-22T12:00:00Z")
+            self.assertEqual(first["alert_changes"]["opened"], 1)
+            self.assertEqual(run(*options, "--reference-time", "2026-11-22T12:00:00Z")["alert_changes"]["opened"], 0)
+            ingest_batch([{"astronaut_id": "a", "metric": "spo2", "value": 97, "unit": "%",
+                           "source": "sensor", "captured_at": "2026-11-22T12:01:00Z"}], db,
+                         reference_time=datetime(2026, 11, 22, 12, 1, tzinfo=timezone.utc))
+            recovered = run(*options, "--reference-time", "2026-11-22T12:01:00Z")
+            self.assertEqual(recovered["alert_changes"]["resolved"], 1)
+            self.assertEqual(len(run("alerts", "--astronaut-id", "a", "--status", "resolved")), 1)
+            # We bound watch mode in tests so it cannot leave a background
+            # process running after the assertion completes.
+            watched = run("monitor", "b", "--metrics", "spo2", "--max-age-seconds", "60",
+                          "--watch", "--checks", "2", "--interval", "0.01")
+            self.assertEqual(watched["alert_changes"]["opened"], 1)
+            self.assertEqual(len(run("alerts", "--astronaut-id", "b")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
