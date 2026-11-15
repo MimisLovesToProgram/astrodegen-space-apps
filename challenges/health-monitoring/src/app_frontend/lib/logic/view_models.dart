@@ -18,7 +18,8 @@ class AppData extends ChangeNotifier {
     Question(title: "Have you had any social interactions today?", type: QuestionType.yesno),
   ];
 
-  Map<String, dynamic> sensorData = {};
+  Map<String, dynamic> sensorAndUserData = {};
+  Map<String, dynamic> domains = {};
 
   Future<void> loadSensorData(String crewId) async {
     await Future.delayed(Duration(seconds: 4));

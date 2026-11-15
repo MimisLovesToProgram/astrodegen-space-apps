@@ -40,6 +40,14 @@ class CurrentUser {
 
     return true; // for success
   }
+
+  Future<bool> signout() async {
+    await Future.delayed(Duration(seconds: 4));
+
+    crewId = "";
+
+    return true;
+  }
 }
 
 
