@@ -27,3 +27,11 @@ build/
 # Local telemetry output (raw and validated records)
 /data/
 
+
+# PocketBase runtime files. We commit only pb_hooks/ and pb_migrations/.
+/backend/pocketbase
+/backend/pocketbase.exe
+/backend/pb_data/
+/backend/*.zip
+/backend/CHANGELOG.md
+/backend/POCKETBASE_*.md
