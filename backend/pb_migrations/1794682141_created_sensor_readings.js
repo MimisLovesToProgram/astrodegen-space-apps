@@ -1,6 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
+// We define reading storage here; we do not ingest or validate measurements.
 migrate((app) => {
   const collection = new Collection({
+    // We keep the API rules locked until access rules are configured separately.
     "createRule": null,
     "deleteRule": null,
     "fields": [
@@ -28,6 +30,7 @@ migrate((app) => {
         "maxSelect": 0,
         "minSelect": 0,
         "name": "astronaut",
+        // We require a link to an astronaut and keep cascading deletion disabled.
         "presentable": false,
         "required": true,
         "system": false,
@@ -39,6 +42,7 @@ migrate((app) => {
         "id": "select2704983686",
         "maxSelect": 0,
         "name": "sensor_type",
+        // We accept only the sensor labels listed in this field's values.
         "presentable": false,
         "required": true,
         "system": false,
@@ -65,6 +69,8 @@ migrate((app) => {
         "max": 0,
         "min": 0,
         "name": "value",
+        // We store the value as text, so we do not enforce numeric units or
+        // plausibility through this field definition.
         "pattern": "",
         "presentable": false,
         "primaryKey": false,
@@ -76,6 +82,7 @@ migrate((app) => {
         "hidden": false,
         "id": "autodate2990389176",
         "name": "created",
+        // We track record creation here, not a separate sensor capture time.
         "onCreate": true,
         "onUpdate": false,
         "presentable": false,
@@ -105,6 +112,7 @@ migrate((app) => {
 
   return app.save(collection);
 }, (app) => {
+  // We remove the reading collection when we roll back this migration.
   const collection = app.findCollectionByNameOrId("pbc_3796695146");
 
   return app.delete(collection);

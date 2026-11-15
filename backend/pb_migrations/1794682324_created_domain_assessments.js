@@ -1,6 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
+// We define storage for assessment results; we do not calculate risks here.
 migrate((app) => {
   const collection = new Collection({
+    // We leave access restricted to superusers through the built-in record APIs.
     "createRule": null,
     "deleteRule": null,
     "fields": [
@@ -28,6 +30,7 @@ migrate((app) => {
         "maxSelect": 0,
         "minSelect": 0,
         "name": "astronaut",
+        // We leave the astronaut link optional in this collection definition.
         "presentable": false,
         "required": false,
         "system": false,
@@ -39,6 +42,7 @@ migrate((app) => {
         "id": "select2812878347",
         "maxSelect": 0,
         "name": "domain",
+        // We identify which health domain the stored assessment describes.
         "presentable": false,
         "required": true,
         "system": false,
@@ -56,6 +60,7 @@ migrate((app) => {
         "id": "select342059477",
         "maxSelect": 0,
         "name": "domain_status",
+        // We store one of the listed status labels without deriving it here.
         "presentable": false,
         "required": true,
         "system": false,
@@ -74,6 +79,7 @@ migrate((app) => {
         "max": 100,
         "min": 0,
         "name": "risk_score",
+        // We constrain the stored score to 0–100 while allowing decimal values.
         "onlyInt": false,
         "presentable": false,
         "required": true,
@@ -86,6 +92,7 @@ migrate((app) => {
         "id": "json1915095946",
         "maxSize": 0,
         "name": "details",
+        // We keep optional explanations or supporting data in a JSON field.
         "presentable": false,
         "required": false,
         "system": false,
@@ -105,6 +112,8 @@ migrate((app) => {
         "hidden": false,
         "id": "autodate1330134206",
         "name": "assessed_at",
+        // We refresh this time on every update, so we do not preserve an
+        // immutable original assessment time in this field.
         "onCreate": true,
         "onUpdate": true,
         "presentable": false,
@@ -124,6 +133,7 @@ migrate((app) => {
 
   return app.save(collection);
 }, (app) => {
+  // We remove the results collection if we roll back this migration.
   const collection = app.findCollectionByNameOrId("pbc_670447587");
 
   return app.delete(collection);

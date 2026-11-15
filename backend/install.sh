@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status
+# We stop the installation as soon as a command reports a failure.
 set -e
 
-# ANSI Color Codes
+# We define terminal colors for the installation messages.
 CYAN='\033[1;36m'
 GREEN='\033[1;32m'
-NC='\033[0m' # No Color
+NC='\033[0m' # We reset the terminal formatting after colored output.
 
-# Print Astrocrates Colored ASCII Art
+# We show the project banner before starting the download.
 echo -e "${CYAN}"
 cat << "EOF"
     _         _                  _              _           
@@ -24,7 +24,7 @@ echo -e "${GREEN}=== Starting PocketBase v0.42.2 Installation ===${NC}"
 URL="https://ganigeorgiev.com/meta/pocketbase/pocketbase/download/v0.42.2/pocketbase_0.42.2_linux_amd64.zip"
 ZIP_NAME="pocketbase_0.42.2_linux_amd64.zip"
 
-# Check for curl or wget tility
+# We use curl when it is available and fall back to wget otherwise.
 if command -v curl &> /dev/null; then
     echo "Downloading PocketBase using curl..."
     curl -L -o "$ZIP_NAME" "$URL"
@@ -36,7 +36,7 @@ else
     exit 1
 fi
 
-# Check for unzip 
+# We check that we can extract the archive before continuing.
 if ! command -v unzip &> /dev/null; then
     echo "Error: 'unzip' utility is not installed. Please install it (e.g., sudo apt install unzip) and try again." >&2
     rm -f "$ZIP_NAME"
@@ -44,6 +44,7 @@ if ! command -v unzip &> /dev/null; then
 fi
 
 echo "Extracting PocketBase into the current directory..."
+# We extract into the current working directory and then remove the archive.
 unzip -o "$ZIP_NAME"
 rm -f "$ZIP_NAME"
 
@@ -52,6 +53,8 @@ echo "You can now run PocketBase with:"
 echo "  ./pocketbase serve"
 
 
+# We only print these account details here; this script does not create an
+# administrator or configure its password in PocketBase.
 echo "ADMIN CREDENTIALS:"
 echo "Username : admin@astrocrates.com"
 echo "Password : astrocrates"
