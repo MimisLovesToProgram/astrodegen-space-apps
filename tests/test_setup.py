@@ -23,12 +23,12 @@ class SetupTests(unittest.TestCase):
             options = dict(binary=os.environ["POCKETBASE_TEST_BINARY"],
                            # Keep account files and server data inside this
                            # test's temporary directory during both setup runs.
-                           data_dir=root / "pb_data", env_dir=root, port=port, keep_running=False)
+                           data_dir=root / "pb_data", env_dir=root, port=port, keep_running=False, seed_demo_users=True)
             subprocess.run([options["binary"], "superuser", "create", "owner@example.invalid", "test-owner-password-123",
                             "--dir", str(options["data_dir"]), "--dev=false"], check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             first = setup_local(**options)
-            original = {path: Path(path).read_bytes() for path in first["credential_files"]}
+            original = {path: Path(path).read_bytes() for path in first["credential_files"] + first["demo_credential_files"]}
             second = setup_local(**options)
             self.assertFalse(second["server_running"])
             self.assertTrue(second["temporary_admin_removed"])
@@ -40,6 +40,8 @@ class SetupTests(unittest.TestCase):
                                  [("ingest",), ("reader",), ("worker",)])
                 self.assertEqual(connection.execute("SELECT count(*) FROM _superusers").fetchone()[0], 1)
                 self.assertEqual(connection.execute("SELECT count(*) FROM _superusers WHERE email LIKE 'setup-%'").fetchone()[0], 0)
+                self.assertEqual(connection.execute("SELECT count(*) FROM users").fetchone()[0], 3)
+                self.assertEqual(connection.execute("SELECT count(*) FROM astronauts").fetchone()[0], 3)
 
     def test_setup_refuses_an_occupied_port(self):
         with tempfile.TemporaryDirectory() as directory, socket.socket() as listener:

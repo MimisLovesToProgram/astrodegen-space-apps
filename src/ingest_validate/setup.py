@@ -24,7 +24,48 @@ def _private_file(path, mode="w"):
     return os.fdopen(descriptor, mode)
 
 
-def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_running=True):
+def _demo_accounts(admin, url, env_dir):
+    files = []
+    for crew_id in ("a", "b", "c"):
+        matches = admin.request("GET", "/api/collections/astronauts/records", query={
+            "filter": "crew_id=" + json.dumps(crew_id), "perPage": 1})["items"]
+        crew = matches[0] if matches else admin.request("POST", "/api/collections/astronauts/records",
+            {"crew_id": crew_id, "name": "Crew " + crew_id.upper(), "status": "unknown"})
+        path = env_dir / (".env.crew-" + crew_id)
+        if path.exists():
+            settings = read_settings(path)
+            if settings.get("POCKETBASE_URL") != url or settings.get("ASTROCRATES_CREW_ID") != crew_id:
+                raise ValueError(f"Existing demo settings need manual review: {path}")
+        else:
+            settings = {"POCKETBASE_URL": url, "ASTROCRATES_USERNAME": "crew_" + crew_id,
+                        "ASTROCRATES_CREW_ID": crew_id, "POCKETBASE_EMAIL": f"astrocrates-crew-{crew_id}@example.invalid",
+                        "POCKETBASE_PASSWORD": secrets.token_urlsafe(32)}
+            # We save generated credentials before account creation so an
+            # interrupted setup can resume without resetting an existing user.
+            with _private_file(path) as handle:
+                for key, value in settings.items():
+                    handle.write(key + "=" + json.dumps(value) + "\n")
+        users = admin.request("GET", "/api/collections/users/records", query={
+            "filter": "email=" + json.dumps(settings["POCKETBASE_EMAIL"]), "perPage": 1})["items"]
+        if users:
+            if users[0]["astronaut"] != crew["id"] or users[0]["username"] != settings["ASTROCRATES_USERNAME"]:
+                raise ValueError("An existing demo account has a different crew or username")
+        else:
+            admin.request("POST", "/api/collections/users/records", {
+                "email": settings["POCKETBASE_EMAIL"], "username": settings["ASTROCRATES_USERNAME"],
+                "password": settings["POCKETBASE_PASSWORD"], "passwordConfirm": settings["POCKETBASE_PASSWORD"],
+                "astronaut": crew["id"]})
+        guest = PocketBaseTelemetry(url)
+        login = guest.request("POST", "/api/astrocrates/login",
+            {"username": settings["ASTROCRATES_USERNAME"], "password": settings["POCKETBASE_PASSWORD"]})
+        if login.get("crewId") != crew_id:
+            raise ValueError("Demo login verification failed; existing passwords were not reset")
+        os.chmod(path, 0o600)
+        files.append(str(path))
+    return files
+
+
+def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_running=True, seed_demo_users=False):
     root = Path(__file__).resolve().parents[2]
     backend = root / "backend"
     binary = Path(binary or backend / "pocketbase").resolve()
@@ -77,6 +118,7 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
     temporary_id = None
     created_admin = False
     completed = False
+    demo_files = []
     with _private_file(log_path, "a") as log:
         try:
             subprocess.run([str(binary), "migrate", "up", *options], check=True, stdout=log, stderr=log)
@@ -129,6 +171,8 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
                         for key, value in settings.items():
                             handle.write(key + "=" + json.dumps(value) + "\n")
                 os.chmod(path, 0o600)
+            if seed_demo_users:
+                demo_files = _demo_accounts(admin, url, env_dir)
             admin.request("DELETE", "/api/collections/_superusers/records/" + temporary_id)
             # The temporary provisioning token is no longer needed once the
             # least-privilege service accounts can authenticate independently.
@@ -157,6 +201,7 @@ def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_runnin
             "pid": process.pid if keep_running else None,
             "service_roles": list(credentials),
             "credential_files": [str(value[0]) for value in credentials.values()],
+            "demo_credential_files": demo_files,
             "log": str(log_path), "backup": str(backup_path) if backup_path.exists() else None,
             "temporary_admin_removed": True}
 
@@ -168,9 +213,10 @@ def main():
     parser.add_argument("--env-dir")
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--stop-after-setup", action="store_true")
+    parser.add_argument("--seed-demo-users", action="store_true", help="Provision private synthetic crew logins")
     args = parser.parse_args()
     print(json.dumps(setup_local(args.binary, args.data_dir, args.env_dir, args.port,
-                                keep_running=not args.stop_after_setup), indent=2))
+                                keep_running=not args.stop_after_setup, seed_demo_users=args.seed_demo_users), indent=2))
 
 
 if __name__ == "__main__":
