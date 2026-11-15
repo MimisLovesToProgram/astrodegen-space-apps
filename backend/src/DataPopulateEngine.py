@@ -444,7 +444,7 @@ class PocketBaseStore:
 
     @classmethod
     def from_environment(cls, env_file=None):
-        settings = connection_settings(env_file)
+        settings = connection_settings(env_file or str(DEFAULT_ENV_FILE))
         return cls(PocketBaseClient.from_settings(settings))
 
     # -- astronauts -------------------------------------------------------
@@ -677,6 +677,28 @@ def run_story(store):
         "ingestion": counts,
         "assessments": {crew: assess_crew(store, crew) for crew in crew_ids},
     }
+
+
+def populate_story(store):
+    """Ingest the full synthetic mission without running assessments.
+
+    assessmentEngine.py owns scoring and posting; this stage only fills
+    sensor_readings so the two engines can run independently.
+    """
+    packets, reference_time = simulated_mission()
+    return ingest_packets(store, packets, assume_utc=True,
+                          reference_time=reference_time)
+
+
+def populate_ticks(store, mode, ticks, interval):
+    """Stream generator ticks into sensor_readings without assessing."""
+    outputs = []
+    for packets, clock, assume_utc in sensor_batches(mode, ticks):
+        outputs.append(ingest_packets(
+            store, packets, assume_utc=assume_utc, reference_time=clock))
+        if interval:
+            time.sleep(interval)
+    return outputs
 
 
 def run_ticks(store, mode, ticks, interval):

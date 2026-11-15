@@ -9,6 +9,7 @@ STEP 3 - Astronaut Health Risk Assessment Engine
 Responsibilities:
 1. Receive validated telemetry history from Step 2.
 2. Evaluate the four physiological domains.
+
 3. Calculate risk scores (0-100).
 4. Identify triggered risk rules.
 5. Classify each domain as GREEN, YELLOW, ORANGE, or RED.
@@ -22,6 +23,14 @@ from datetime import datetime
 from statistics import mean
 
 from step2_config import RISK_MODELS
+
+# PocketBase access and the sensor_readings value encoding live in
+# DataPopulateEngine; this module reuses them so both engines agree on
+# how readings are stored and read back.
+from DataPopulateEngine import (
+    PocketBaseStore,
+    _deserialize_value,
+)
 
 
 # ---------------------------------------------------------
@@ -468,28 +477,122 @@ def assess_astronaut(telemetry_history, crew_id=None):
 
 
 # ---------------------------------------------------------
-# SECTION 8: Example execution
+# SECTION 8: PocketBase read/write stages
+#
+# These functions let callers run each stage manually:
+#   load_history()      - read sensor_readings, group into daily packets
+#   assess_astronaut()  - pure scoring (sections 1-7)
+#   save_assessment()   - post domain_assessments records
+#   assess_crew()       - all three stages for one crew member
+#   assess_all()        - every crew member
+# ---------------------------------------------------------
+
+def load_history(crew_id, store):
+    """Read sensor_readings for one crew member and regroup them into
+    per-day telemetry packets, the shape assess_astronaut() expects.
+
+    Each packet carries crew_id, mission_day, timestamp, and one key per
+    sensor_readings.select metric.
+    """
+    astronaut_id = store.astronaut_id(crew_id)
+    records = []
+    page = 1
+    while True:
+        batch = store.client.request(
+            "GET", "/api/collections/sensor_readings/records",
+            query={
+                "filter": f'astronaut="{astronaut_id}"',
+                "sort": "captured_at,id", "perPage": 500, "page": page,
+                "skipTotal": "true",
+            },
+        )["items"]
+        records.extend(batch)
+        if len(batch) < 500:
+            break
+        page += 1
+
+    days = {}
+    for record in records:
+        if not record.get("captured_at") or not record.get("select"):
+            continue
+        day = record.get("mission_day")
+        key = day if day is not None else record["captured_at"][:10]
+        packet = days.get(key)
+        if packet is None:
+            packet = days[key] = {
+                "crew_id": crew_id,
+                "mission_day": day if day is not None else 0,
+                "timestamp": record["captured_at"],
+            }
+        elif record["captured_at"] < packet["timestamp"]:
+            packet["timestamp"] = record["captured_at"]
+        packet[record["select"]] = _deserialize_value(
+            record["select"], record["value"])
+
+    return sorted(
+        days.values(),
+        key=lambda packet: (packet["mission_day"], packet["timestamp"]),
+    )
+
+
+def save_assessment(crew_id, assessment, store):
+    """Post one domain_assessments record per domain to PocketBase."""
+    astronaut_id = store.astronaut_id(crew_id)
+    for domain, result in assessment["domain_assessments"].items():
+        details = {
+            "matched_rules": result["matched_rules"],
+            "triggered": result["triggered"],
+            "trigger_at": result["trigger_at"],
+            "trigger_message": result["trigger_message"],
+            "assessed_at": assessment["assessed_at"],
+            "overall_status": assessment["overall_status"],
+            "highest_risk_domain": assessment["highest_risk_domain"],
+        }
+        store.client.request(
+            "POST", "/api/collections/domain_assessments/records",
+            {
+                "astronaut": astronaut_id,
+                "domain": domain,
+                "domain_status": result["risk_level"].lower(),
+                "risk_score": result["risk_score"],
+                "details": details,
+            },
+        )
+
+
+def assess_crew(crew_id, store=None, post=True):
+    """Run all stages for one crew member.
+
+    Reads their stored readings, scores all four domains, and posts the
+    results. Set post=False to compute without writing.
+    """
+    store = store or PocketBaseStore.from_environment()
+    history = load_history(crew_id, store)
+    assessment = assess_astronaut(history, crew_id=crew_id)
+    if post:
+        save_assessment(crew_id, assessment, store)
+    return assessment
+
+
+def assess_all(store=None, post=True, crew_ids=("a", "b", "c")):
+    """Assess every crew member; crews without readings are skipped."""
+    store = store or PocketBaseStore.from_environment()
+    results = {}
+    for crew_id in crew_ids:
+        try:
+            results[crew_id] = assess_crew(crew_id, store, post=post)
+        except ValueError as error:
+            results[crew_id] = {"error": str(error)}
+    return results
+
+
+# ---------------------------------------------------------
+# SECTION 9: Example execution
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
 
     import json
 
-    # Example: Load validated telemetry packets.
-    with open("validated_readings.json", "r") as file:
-        telemetry = json.load(file)
-
-    # Assess one astronaut.
-    assessment = assess_astronaut(
-        telemetry_history=telemetry,
-        crew_id="a"
-    )
-
-    print("\n===== ASTRONAUT RISK ASSESSMENT =====")
-
-    print(
-        json.dumps(
-            assessment,
-            indent=4
-        )
-    )
+    # Read stored readings, assess, and post results for every crew.
+    print(json.dumps(assess_all(), indent=4))
