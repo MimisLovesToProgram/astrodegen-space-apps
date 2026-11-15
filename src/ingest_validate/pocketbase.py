@@ -187,3 +187,61 @@ class PocketBaseTelemetry:
                 break
             page += 1
         return alerts[:limit]
+
+    def enqueue_assessment(self, history, astronaut_id, policy, *, as_of=None, history_limit=10000):
+        from assessment.jobs import make_job
+        job = make_job(history, astronaut_id, policy, as_of=as_of, history_limit=history_limit)
+        return self.request("POST", "/api/astrocrates/assessment-jobs", job)
+
+    def claim_assessment_job(self, *, job_id=None, lease_seconds=30):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/claim",
+                            {"job_id": job_id, "lease_seconds": lease_seconds})["job"]
+
+    def complete_assessment_job(self, job_id, claim_token, result):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/complete",
+                            {"job_id": job_id, "claim_token": claim_token, "result": result})
+
+    def fail_assessment_job(self, job_id, claim_token, error):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/fail",
+                            {"job_id": job_id, "claim_token": claim_token, "error": error})
+
+    def retry_assessment_job(self, job_id, *, reset_attempts=False):
+        return self.request("POST", "/api/astrocrates/assessment-jobs/retry",
+                            {"job_id": job_id, "reset_attempts": reset_attempts})
+
+    def _assessment_records(self, collection, *, filters="", sort="", limit=100, fields=None):
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("limit must be between 1 and 10000")
+        records, page = [], 1
+        size = min(limit, 500)
+        while len(records) < limit:
+            query = {"filter": filters, "sort": sort, "page": page, "perPage": size, "skipTotal": "true"}
+            if fields:
+                query["fields"] = fields
+            batch = self.request("GET", f"/api/collections/{collection}/records", query=query)["items"]
+            records.extend(batch)
+            if len(batch) < size:
+                break
+            page += 1
+        return records[:limit]
+
+    def get_assessments(self, astronaut_id, limit=250, *, policy_id=None):
+        filters = "astronaut_id=" + json_string(astronaut_id)
+        if policy_id is not None:
+            filters += " && policy_id=" + json_string(policy_id)
+        records = self._assessment_records("assessment_runs", filters=filters,
+                                           sort="-assessed_at,-created_at,-id", limit=limit)
+        return [{**record["result"], "run_id": record["id"]} for record in records]
+
+    def list_assessment_jobs(self, *, status=None, limit=100):
+        if status is not None and status not in {"pending", "running", "complete", "failed"}:
+            raise ValueError("Unsupported job status")
+        return self._assessment_records("assessment_jobs", filters="status=" + json_string(status) if status else "",
+            sort="as_of,created_at,id", limit=limit,
+            fields="id,status,astronaut_id,policy_id,as_of,attempts,error,result_run_id,created_at")
+
+    def list_escalations(self, *, astronaut_id=None, limit=100):
+        filters = ""
+        if astronaut_id is not None:
+            filters = "astronaut_id=" + json_string(astronaut_id)
+        return self._assessment_records("escalation_events", filters=filters, sort="-occurred_at,-id", limit=limit)

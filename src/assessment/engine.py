@@ -117,6 +117,7 @@ def assess_history(history, astronaut_id, policy, *, as_of=None):
         level = max(known) if known and (max(known) > 0 or len(known) == len(rules)) else None
         readings = streams.get(metric, [])
         metrics[metric] = {"value": readings[-1]["value"] if readings else None,
+                           "source": readings[-1]["source"] if readings else None,
                            "captured_at": readings[-1]["captured_at"] if readings else None,
                            "level": level, "status": COLORS[level] if level is not None else "unknown",
                            "data_complete": len(known) == len(rules)}

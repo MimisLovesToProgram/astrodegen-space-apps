@@ -81,17 +81,34 @@ def sensor_batches(mode="story", ticks=None):
             tick += 1
 
 
-def report_processed(store, result):
+def report_processed(store, result, assessment_policy=None, assessment_history_limit=10000, run_assessment=False):
     # Export clean history for affected crews while stating explicitly that
     # no actual health assessment engine has been configured yet.
     ingestion = result["ingestion"]
     crew = sorted({item["astronaut_id"] for item in ingestion["accepted"]})
-    return {
+    output = {
         "processed_packets": len(result["packet_ids"]),
         "counts": {key: len(records) for key, records in ingestion.items()},
         "step3_history": {astronaut: store.get_history(astronaut) for astronaut in crew},
         "assessment_status": "not_configured",
     }
+    if assessment_policy is not None:
+        from assessment.jobs import run_jobs
+        queued = []
+        for astronaut in crew:
+            # We reassess the latest clean state even when a newly accepted
+            # reading arrived late and changes the preceding baseline window.
+            history = store.get_history(astronaut, assessment_history_limit)
+            clock = max(datetime.fromisoformat(item["captured_at"].replace("Z", "+00:00")) for item in history)
+            queued.append(store.enqueue_assessment(history, astronaut, assessment_policy,
+                                                   as_of=clock, history_limit=assessment_history_limit))
+        output["assessment_jobs"] = queued
+        output["assessment_status"] = "queued" if queued else "no_new_data"
+        if run_assessment and queued:
+            work = [run_jobs(store, job_id=job["id"]) for job in queued]
+            output["assessment_work"] = work
+            output["assessment_status"] = "failed" if any(item["failed"] for item in work) else "completed"
+    return output
 
 
 def main():
@@ -111,6 +128,10 @@ def main():
     process.add_argument("--limit", type=int, default=100)
     process.add_argument("--watch", action="store_true")
     process.add_argument("--interval", type=float, default=1)
+    for command in (capture, process):
+        command.add_argument("--assessment-policy", help="Queue Step 3 using an explicit policy JSON")
+        command.add_argument("--assessment-history-limit", type=int, default=10000)
+        command.add_argument("--run-assessment", action="store_true", help="Run the queued Step 3 work immediately")
     history = actions.add_parser("history", help="Read validated observations for Step 3")
     history.add_argument("astronaut_id")
     history.add_argument("--limit", type=int, default=250)
@@ -127,15 +148,28 @@ def main():
     handoff = actions.add_parser("handoff", help="Export versioned clean history for Step 3")
     handoff.add_argument("astronaut_id")
     handoff.add_argument("--limit", type=int, default=250)
+    from assessment.cli import COMMANDS as ASSESSMENT_COMMANDS, execute as execute_assessment, register_commands
+    register_commands(actions)
     args = parser.parse_args()
     if hasattr(args, "interval") and (not math.isfinite(args.interval) or args.interval < 0):
         parser.error("--interval must be finite and nonnegative")
-    if args.action == "process" and args.watch and args.interval == 0:
+    if args.action in {"process", "assessment-worker"} and args.watch and args.interval == 0:
         parser.error("--watch requires a positive --interval")
     if args.action == "contract":
         from ingest_validate.contract import observation_contract
         print(json.dumps(observation_contract(), indent=2, allow_nan=False))
         return
+    if args.action in ASSESSMENT_COMMANDS and args.backend != "pocketbase":
+        parser.error("Assessment persistence uses the shared PocketBase backend; import assessment for offline calculations")
+    assessment_policy = None
+    if args.action in {"capture", "process"}:
+        if args.run_assessment and not args.assessment_policy:
+            parser.error("--run-assessment requires --assessment-policy")
+        if args.assessment_policy:
+            if args.backend != "pocketbase" or (args.action == "capture" and not args.process):
+                parser.error("Automatic assessment requires PocketBase and capture --process or the process command")
+            from assessment.policy import load_policy
+            assessment_policy = load_policy(args.assessment_policy)
     if args.backend == "pocketbase":
         # The command interface is shared by both storage implementations;
         # database credentials are resolved only for the HTTP backend.
@@ -144,7 +178,9 @@ def main():
     else:
         store = LocalTelemetry(args.db)
     try:
-        if args.action == "capture":
+        if args.action in ASSESSMENT_COMMANDS:
+            execute_assessment(args, store)
+        elif args.action == "capture":
             for tick, (packets, clock, assume_utc) in enumerate(sensor_batches(args.mode, args.ticks)):
                 if tick:
                     time.sleep(args.interval)
@@ -152,13 +188,15 @@ def main():
                 output = {"captured_packets": len(ids), "packet_ids": ids,
                           "simulation_clock": clock.isoformat() if clock else None}
                 if args.process:
-                    output.update(report_processed(store, store.process_pending()))
+                    output.update(report_processed(store, store.process_pending(), assessment_policy,
+                                                   args.assessment_history_limit, args.run_assessment))
                 print(json.dumps(output, allow_nan=False), flush=True)
         elif args.action == "process":
             while True:
                 result = store.process_pending(args.limit)
                 if result["packet_ids"] or not args.watch:
-                    print(json.dumps(report_processed(store, result), allow_nan=False), flush=True)
+                    print(json.dumps(report_processed(store, result, assessment_policy,
+                                                     args.assessment_history_limit, args.run_assessment), allow_nan=False), flush=True)
                 if not args.watch:
                     break
                 time.sleep(args.interval)

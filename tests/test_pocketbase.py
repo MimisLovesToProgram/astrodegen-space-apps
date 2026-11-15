@@ -1,6 +1,7 @@
 """Real API tests: set POCKETBASE_TEST_BINARY to an installed executable."""
 
 import os
+import copy
 import socket
 import json
 import sys
@@ -18,6 +19,9 @@ from biosensors import Crew, reading_from
 from ingest_validate.pocketbase import PocketBaseError, PocketBaseTelemetry
 from ingest_validate.alerts import alert_snapshot
 from ingest_validate.quality import quality_report
+from assessment import assess_history
+from assessment.jobs import run_jobs
+from assessment_fixtures import observation, sample_policy
 
 
 @unittest.skipUnless(os.environ.get("POCKETBASE_TEST_BINARY"), "Set POCKETBASE_TEST_BINARY to run real API tests")
@@ -32,7 +36,7 @@ class PocketBaseTests(unittest.TestCase):
         cls.addClassCleanup(cls.log.close)
         root = Path(__file__).resolve().parents[1]
         options = ["--dir", str(Path(cls.directory.name) / "pb_data"),
-                   "--migrationsDir", str(root / "backend/pb_migrations")]
+                   "--migrationsDir", str(root / "backend/pb_migrations"), "--automigrate=false"]
         password = uuid.uuid4().hex
         binary = os.environ["POCKETBASE_TEST_BINARY"]
         subprocess.run([binary, "superuser", "create", "test@example.com", password, *options],
@@ -74,7 +78,8 @@ class PocketBaseTests(unittest.TestCase):
             cls.clients[role] = client
 
     def setUp(self):
-        for collection in ("quality_alerts", "quality_checks", "validated_observations", "validation_results", "sensor_packets"):
+        for collection in ("escalation_events", "domain_assessments", "assessment_runs", "assessment_jobs", "astronauts",
+                           "quality_alerts", "quality_checks", "validated_observations", "validation_results", "sensor_packets"):
             path = f"/api/collections/{collection}/records"
             while True:
                 rows = self.admin.request("GET", path, query={"perPage": 500})["items"]
@@ -214,6 +219,94 @@ class PocketBaseTests(unittest.TestCase):
         self.assertEqual(self.worker.list_quality_alerts(status="all"), [])
         checks = self.worker.request("GET", "/api/collections/quality_checks/records")
         self.assertEqual(checks["totalItems"], 0)
+
+    def test_assessment_jobs_and_escalation_transitions(self):
+        policy = sample_policy()
+        for domain in policy["domains"].values():
+            domain["rules"].append({**domain["rules"][0], "id": "higher", "threshold": 90, "points": 20, "level": 3})
+        history = []
+        for day, value, expected_events in ((4, 60, 0), (5, 85, 4), (6, 85, 0), (7, 95, 4)):
+            history.append(observation(value, day=day))
+            clock = datetime(2026, 11, day, 12, tzinfo=timezone.utc)
+            job = self.worker.enqueue_assessment(history, "a", policy, as_of=clock)
+            duplicate = self.worker.enqueue_assessment(list(reversed(history)), "a", policy, as_of=clock)
+            self.assertEqual(job["id"], duplicate["id"])
+            result = run_jobs(self.worker, job_id=job["id"])
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(len(result["completed"]), 1)
+            self.assertEqual(result["escalation_events"], expected_events)
+        runs = self.clients["reader"].get_assessments("a")
+        self.assertEqual(len(runs), 4)
+        self.assertEqual(runs[0]["overall_level"], 3)
+        self.assertEqual(len(self.clients["reader"].list_escalations(astronaut_id="a")), 8)
+
+    def test_assessment_retry_and_expired_lease(self):
+        clock = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+        job = self.worker.enqueue_assessment([observation(85)], "a", sample_policy(), as_of=clock)
+        first = self.worker.claim_assessment_job(job_id=job["id"])
+        self.worker.fail_assessment_job(job["id"], first["claim_token"], "Synthetic failure")
+        self.assertIsNone(self.worker.claim_assessment_job(job_id=job["id"]))
+        self.worker.retry_assessment_job(job["id"])
+        second = self.worker.claim_assessment_job(job_id=job["id"])
+        self.admin.request("PATCH", "/api/collections/assessment_jobs/records/" + job["id"],
+                           {"lease_until": "2000-01-01T00:00:00.000Z"})
+        third = self.worker.claim_assessment_job(job_id=job["id"])
+        self.assertNotEqual(second["claim_token"], third["claim_token"])
+        result = assess_history(third["observations"], "a", third["policy"], as_of=clock)
+        with self.assertRaises(PocketBaseError) as error:
+            self.worker.complete_assessment_job(job["id"], second["claim_token"], result)
+        self.assertEqual(error.exception.status, 409)
+        self.worker.complete_assessment_job(job["id"], third["claim_token"], result)
+        self.assertEqual(len(self.worker.get_assessments("a")), 1)
+
+    def test_assessment_result_commit_is_atomic(self):
+        clock = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+        job = self.worker.enqueue_assessment([observation(85)], "a", sample_policy(), as_of=clock)
+        claim = self.worker.claim_assessment_job(job_id=job["id"])
+        result = assess_history(claim["observations"], "a", claim["policy"], as_of=clock)
+        schema = self.admin.request("GET", "/api/collections/domain_assessments")
+        fields = copy.deepcopy(schema["fields"])
+        next(field for field in fields if field["name"] == "risk_score")["max"] = 50
+        # We use the supported schema API in the isolated server to force a
+        # later domain insert to fail after the result transaction has begun.
+        self.admin.request("PATCH", "/api/collections/domain_assessments", {"fields": fields})
+        try:
+            with self.assertRaises(PocketBaseError):
+                self.worker.complete_assessment_job(job["id"], claim["claim_token"], result)
+            self.assertEqual(self.worker.get_assessments("a"), [])
+            self.assertEqual(self.worker.list_escalations(), [])
+        finally:
+            self.admin.request("PATCH", "/api/collections/domain_assessments", {"fields": schema["fields"]})
+
+    def test_unknown_assessment_does_not_create_green_domain_rows(self):
+        job = self.worker.enqueue_assessment([], "a", sample_policy(),
+                                              as_of=datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+        result = run_jobs(self.worker, job_id=job["id"])
+        self.assertEqual(result["failed"], [])
+        self.assertIsNone(self.worker.get_assessments("a")[0]["overall_level"])
+        rows = self.admin.request("GET", "/api/collections/domain_assessments/records")
+        self.assertEqual(rows["totalItems"], 0)
+
+    def test_ingest_and_reader_cannot_run_assessments(self):
+        for role in ("ingest", "reader"):
+            with self.subTest(role=role), self.assertRaises(PocketBaseError) as error:
+                self.clients[role].claim_assessment_job()
+            self.assertEqual(error.exception.status, 403)
+
+    def test_sensor_commands_queue_and_run_assessments(self):
+        root = Path(__file__).resolve().parents[1]
+        env = dict(os.environ, PYTHONPATH=str(root / "src"), POCKETBASE_URL=self.url, POCKETBASE_TOKEN=self.worker.token)
+        command = [sys.executable, "-m", "astrocrates", "capture", "--interval", "0", "--process",
+                   "--assessment-policy", str(root / "config/assessment-demo.json"), "--run-assessment"]
+        output = subprocess.check_output(command, env=env, cwd=root, text=True)
+        ticks = [json.loads(line) for line in output.splitlines()]
+        self.assertTrue(all(tick["assessment_status"] == "completed" for tick in ticks))
+        self.assertEqual(len(self.worker.list_assessment_jobs(status="complete")), 21)
+        self.assertEqual(len(self.worker.get_assessments("a")), 7)
+        self.assertTrue(self.worker.list_escalations())
+        replay = subprocess.check_output(command, env=env, cwd=root, text=True)
+        self.assertTrue(all(json.loads(line)["assessment_status"] == "no_new_data" for line in replay.splitlines()))
+        self.assertEqual(len(self.worker.list_assessment_jobs(status="complete")), 21)
 
 
 if __name__ == "__main__":
