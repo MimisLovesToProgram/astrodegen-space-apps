@@ -16,7 +16,12 @@ class _Metric {
 /// Keys match the field names returned by the crew history API.
 /// Order = display order.
 const Map<String, _Metric> _metrics = {
-  'hrr': _Metric('Resting heart rate', _Kind.progress, max: 150, unit: 'bpm'),
+  'hr_resting': _Metric(
+    'Resting heart rate',
+    _Kind.progress,
+    max: 150,
+    unit: 'bpm',
+  ),
   'hrv': _Metric(
     'Heart rate variability',
     _Kind.progress,
@@ -32,7 +37,7 @@ const Map<String, _Metric> _metrics = {
     unit: 'mSv',
   ),
   'sleep_h': _Metric('Sleep hours', _Kind.number, unit: 'h'),
-  'sleep_quality': _Metric('Sleep quality', _Kind.progress, max: 5),
+  'sleep_q': _Metric('Sleep quality', _Kind.progress, max: 5),
   'mood': _Metric('Mood', _Kind.progress, max: 5),
   'activity_pct_target': _Metric(
     'Activity vs target',
@@ -43,7 +48,7 @@ const Map<String, _Metric> _metrics = {
   // We count reported symptoms, so the average is symptoms per day.
   'symptoms': _Metric('Symptoms per day', _Kind.number),
   'exercise_logged': _Metric('Exercise', _Kind.yesNo),
-  'social_interaction': _Metric('Social interaction', _Kind.yesNo),
+  'social_interactions': _Metric('Social interaction', _Kind.yesNo),
 };
 
 const List<String> _dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -220,7 +225,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           return v is num && v > _sleepThresholdHours;
         }).toList(),
       ),
-      for (final key in const ['exercise_logged', 'social_interaction'])
+      for (final key in const ['exercise_logged', 'social_interactions'])
         _CheckboxWeekRow(
           title: _metrics[key]!.label,
           letters: _dayLetters,
@@ -326,7 +331,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   double _goodnessFor(_Metric metric, double progress) {
     final key = _metrics.entries.firstWhere((e) => e.value == metric).key;
     switch (key) {
-      case 'hrr':
+      case 'hr_resting':
       case 'radiation_msv_cumulative':
         return 1 - progress;
       case 'temp_c':
@@ -334,7 +339,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final diff = (temp - 37).abs();
         return (1 - diff / 3).clamp(0.0, 1.0).toDouble();
       default:
-        return progress; // hrv, spo2, sleep_quality, mood: higher is better
+        return progress; // hrv, spo2, sleep_q, mood: higher is better
     }
   }
 }
