@@ -210,7 +210,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () {
-                                if (currentQuestion.answer != null || currentQuestion.ansList != null) {
+                                if (currentQuestion.answer != null || (currentQuestion.ansList == null && currentQuestion.type == QuestionType.list)) {
                                 
                                   setState(() {
                                     currentQuestionIndx++;
@@ -247,7 +247,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () async {
-                                if (currentQuestion.answer != null || currentQuestion.ansList != null) {
+                                if (currentQuestion.answer != null || (currentQuestion.ansList != null && currentQuestion.type == QuestionType.list)) {
                                 
                                   setState(() {
                                     gettingSensorData = true;

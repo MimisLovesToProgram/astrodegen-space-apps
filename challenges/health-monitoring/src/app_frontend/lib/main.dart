@@ -10,6 +10,7 @@ void main() async {
   await DateStorage.instance.init();
 
   DateStorage.instance.shPref.clear();
+  DateStorage.instance.lastDateEntered = DateTime.now().subtract(Duration(days: 2));
 
   runApp(const MainApp());
 }
