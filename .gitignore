@@ -27,3 +27,4 @@ build/
 # Local telemetry output (raw and validated records)
 /data/
 
+/backend/LICENSE.md
