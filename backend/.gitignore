@@ -1,7 +1,7 @@
-# We keep executables and generated runtime data out of Git.
-/pocketbase
-/pocketbase.exe
+pocketbase
+CHANGELOG.md
+pocketbase/*
+
+# Local PocketBase runtime files
 /pb_data/
-/CHANGELOG.md
-/POCKETBASE_*.md
-/*.zip
+/src/data/telemetry.sqlite

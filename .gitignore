@@ -27,5 +27,9 @@ build/
 # Local telemetry output (raw and validated records)
 /data/
 
+/backend/LICENSE.md
 
+# PocketBase executable and local runtime data
+/backend/pocketbase
 /backend/pb_data/
+/backend/src/data/telemetry.sqlite

@@ -53,7 +53,9 @@ echo "You can now run PocketBase with:"
 echo "  ./pocketbase serve"
 
 
-# We use the PocketBase installer instead of promising account credentials
-# that this script has not created.
-echo "Create the first administrator using the installer link printed by PocketBase."
+# We only print these account details here; this script does not create an
+# administrator or configure its password in PocketBase.
+echo "ADMIN CREDENTIALS:"
+echo "Username : admin@astrocrates.com"
+echo "Password : astrocrates"
 

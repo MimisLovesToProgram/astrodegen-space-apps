@@ -44,7 +44,7 @@ SENSOR_THRESHOLDS = {
         "alert": [("gte", 38.6), ("lt", 35.5)],
     },
     "radiation_msv_cumulative": {
- "input_type": "sensor",
+        "input_type": "sensor",
         "unit": "mSv",
         "limit": 600,  # cumulative mission limit
         "normal": (None, 600),

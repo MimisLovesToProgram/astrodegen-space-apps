@@ -1,10 +1,9 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/screens/history_screen.dart';
+import 'package:app_frontend/screens/login_screen.dart';
+import 'package:flutter/material.dart';
 
-import '../logic/crew_api.dart';
-import '../logic/models.dart';
-import '../logic/view_models.dart';
-import 'history_screen.dart';
-import 'login_screen.dart';
+import 'package:app_frontend/logic/view_models.dart';
 
 /// Status colors (0 = Good, 1 = Watch, 2 = Warning, 3 = Alert).
 const List<Color> _statusColors = [
@@ -15,11 +14,6 @@ const List<Color> _statusColors = [
 ];
 const List<String> _statusLabels = ['Good', 'Watch', 'Warning', 'Alert'];
 
-/// We use grey for readings that have not been assessed yet. A missing level
-/// must never look like a healthy green reading.
-const Color _unknownColor = Color(0xFFBDBDBD);
-const String _unknownLabel = 'Not assessed';
-
 /// How each metric is displayed.
 enum _MetricKind { progress, number, yesNo, list }
 
@@ -29,61 +23,34 @@ class _MetricConfig {
   final double max; // used for progress kind
   final String unit;
 
-  const _MetricConfig(this.label, this.kind, {this.max = 1, this.unit = ''});
+  const _MetricConfig(
+    this.label,
+    this.kind, {
+    this.max = 1,
+    this.unit = '',
+  });
 }
 
-/// Keys match the field names returned by the crew history API, including its
-/// aliases `hrv`, `sleep_q`, and `social_interactions`.
-/// Order = display order.
+/// Keys follow the names in your notebook table. Order = display order.
 const Map<String, _MetricConfig> _metricConfigs = {
-  'hr_resting': _MetricConfig(
-    'Resting heart rate',
-    _MetricKind.progress,
-    max: 150,
-    unit: 'bpm',
-  ),
-  'hrv': _MetricConfig(
-    'Heart rate variability',
-    _MetricKind.progress,
-    max: 100,
-    unit: 'ms',
-  ),
+  'hrr': _MetricConfig('Resting heart rate', _MetricKind.progress,
+      max: 150, unit: 'bpm'),
+  'hrv': _MetricConfig('Heart rate variability', _MetricKind.progress,
+      max: 100, unit: 'ms'),
   'spo2': _MetricConfig('SpO2', _MetricKind.progress, max: 100, unit: '%'),
-  'temp_c': _MetricConfig(
-    'Temperature',
-    _MetricKind.progress,
-    max: 42,
-    unit: '°C',
-  ),
+  'temp_c': _MetricConfig('Temperature', _MetricKind.progress,
+      max: 42, unit: '°C'),
   'radiation_msv_cumulative': _MetricConfig(
-    'Cumulative radiation',
-    _MetricKind.progress,
-    max: 600,
-    unit: 'mSv',
-  ),
+      'Cumulative radiation', _MetricKind.progress,
+      max: 600, unit: 'mSv'),
   'sleep_h': _MetricConfig('Sleep hours', _MetricKind.number, unit: 'h'),
-  'sleep_q': _MetricConfig('Sleep quality', _MetricKind.progress, max: 5),
+  'sleep_quality':
+      _MetricConfig('Sleep quality', _MetricKind.progress, max: 5),
   'mood': _MetricConfig('Mood', _MetricKind.progress, max: 5),
-  'activity_pct_target': _MetricConfig(
-    'Activity vs target',
-    _MetricKind.progress,
-    max: 100,
-    unit: '%',
-  ),
-  'symptoms': _MetricConfig('Symptoms', _MetricKind.list),
+  'symptoms': _MetricConfig('Symptoms', _MetricKind.number),
   'exercise_logged': _MetricConfig('Exercise today', _MetricKind.yesNo),
-  'social_interactions': _MetricConfig(
-    'Social interaction today',
-    _MetricKind.yesNo,
-  ),
-};
-
-/// Display names for the four assessment domains, in display order.
-const Map<String, String> _domainLabels = {
-  'cardiovascular': 'Cardiovascular',
-  'immune': 'Immune',
-  'behavioral': 'Behavioral',
-  'bone_loss': 'Bone loss',
+  'social_interaction':
+      _MetricConfig('Social interaction today', _MetricKind.yesNo),
 };
 
 class StatusScreen extends StatefulWidget {
@@ -97,8 +64,8 @@ class _StatusScreenState extends State<StatusScreen> {
   final ScrollController _todayController = ScrollController();
   final ScrollController _historyController = ScrollController();
 
+  // For the circular progress indicator
   bool isLoading = false;
-  String? error;
 
   @override
   void dispose() {
@@ -107,50 +74,39 @@ class _StatusScreenState extends State<StatusScreen> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
-    setState(() {
-      isLoading = true;
-      error = null;
-    });
-    try {
-      await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
-    } catch (failure) {
-      if (mounted) setState(() => error = failure.toString());
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  void _signOut() {
-    CurrentUser.instance.logout();
-    AppData.instance.reset();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // Data helpers
   // ---------------------------------------------------------------------------
 
-  /// Day keys from the API, newest first. Keys look like "yyyy-MM-dd".
-  List<String> _daysNewestFirst() =>
-      AppData.instance.sensorData.keys.toList()..sort((a, b) => b.compareTo(a));
+  /// Returns today's metrics map. Assumes date keys look like "yyyy-MM-dd".
+  /// Falls back to the most recent date if today has no entry.
+  Map<String, dynamic> _todayData() {
+    final Map<dynamic, dynamic> all = AppData.instance.sensorAndUserData;
+    if (all.isEmpty) return {};
 
-  /// We show the most recent day that has data. When there is no reading for
-  /// today yet, the title says which day the values come from.
-  String? _latestDay() {
-    final days = _daysNewestFirst();
-    return days.isEmpty ? null : days.first;
+    final now = DateTime.now();
+    final todayKey = '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+
+    dynamic entry = all[todayKey];
+    if (entry == null) {
+      final keys = all.keys.map((k) => k.toString()).toList()..sort();
+      entry = all[keys.last];
+    }
+    return Map<String, dynamic>.from(entry as Map);
   }
 
-  Color _statusColor(int? status) =>
-      status == null ? _unknownColor : _statusColors[status];
+  Color _statusColor(int status) =>
+      _statusColors[status.clamp(0, _statusColors.length - 1)];
 
-  String _statusLabel(int? status) =>
-      status == null ? _unknownLabel : _statusLabels[status];
+  /// Domain percentage (0-100) -> color: green good, red bad.
+  Color _percentColor(double percent) {
+    if (percent >= 75) return _statusColors[0];
+    if (percent >= 50) return _statusColors[1];
+    if (percent >= 25) return _statusColors[2];
+    return _statusColors[3];
+  }
 
   String _fmt(num n) =>
       n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(1);
@@ -161,121 +117,104 @@ class _StatusScreenState extends State<StatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final data = AppData.instance;
-    final latest = _latestDay();
-    final todayKey = DateTime.now().toIso8601String().substring(0, 10);
-    final todayTitle = latest == null || latest == todayKey
-        ? "Today's Status"
-        : 'Latest Status ($latest)';
-
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.rocket_launch),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                data.profile['name'] as String? ?? 'Astrocrates',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            Icon(Icons.rocket_launch),
+            SizedBox(width: 8),
+            Text('Astrocrates'),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: isLoading ? null : _refresh,
-          ),
-          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
-            onPressed: isLoading ? null : _signOut,
+            onPressed: () async {
+              setState(() {
+                isLoading = true;
+              });
+              final success = await CurrentUser.instance.signout();
+              setState(() {
+                isLoading = false;
+              });
+
+              if (!context.mounted) return;
+
+              if (success) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => LoginScreen())
+                );
+              }
+
+            },
           ),
         ],
       ),
+
       body: Stack(
         children: [
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  if (data.notice != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(data.notice!),
-                    ),
-                  Text(
-                    todayTitle,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  Text("Today's Status",
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
-                  Expanded(flex: 3, child: _buildTodaySection(latest)),
+                  Expanded(flex: 3, child: _buildTodaySection()),
                   const SizedBox(height: 16),
-                  Text(
-                    'Health Domains',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  Text('Historical Status',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Expanded(flex: 2, child: _buildHistorySection()),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Prototype assessments based on simulated data. '
-                    'Domain bars show risk points, where higher is worse. '
-                    'Grey means not assessed yet or required data is missing.',
-                    style: TextStyle(fontSize: 12),
-                  ),
                 ],
               ),
             ),
           ),
-          if (isLoading)
-            Positioned.fill(
-              child: Container(
-                color: const Color.fromARGB(150, 0, 0, 0),
-                child: const Center(
-                  child: SizedBox(
+
+          // For the loading indicator
+          Positioned.fill(
+            child: Container(
+              color: const Color.fromARGB(150, 0, 0, 0),
+              child: Column(
+                children: [
+
+                  Text("Signout..."),
+                  SizedBox(
                     height: 50,
                     width: 50,
                     child: CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 8,
                     ),
-                  ),
-                ),
+                  )
+
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Latest day's status
+  // Today's status
   // ---------------------------------------------------------------------------
 
-  Widget _buildTodaySection(String? day) {
-    final readings = day == null
-        ? const <String, MetricReading>{}
-        : AppData.instance.sensorData[day]!;
+  Widget _buildTodaySection() {
+    final data = _todayData();
     final entries = _metricConfigs.entries
-        .where((e) => readings.containsKey(e.key))
+        .where((e) => data.containsKey(e.key))
         .toList();
 
     return _SectionCard(
       child: entries.isEmpty
-          ? const Center(child: Text('No validated readings yet'))
+          ? const Center(child: Text('No data for today'))
           : Scrollbar(
               controller: _todayController,
               thumbVisibility: true,
@@ -285,64 +224,62 @@ class _StatusScreenState extends State<StatusScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 12, 20, 12),
                 itemCount: entries.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemBuilder: (context, i) =>
-                    _buildMetric(entries[i].value, readings[entries[i].key]!),
+                itemBuilder: (context, i) {
+                  final key = entries[i].key;
+                  final cfg = entries[i].value;
+                  final list = data[key] as List;
+                  return _buildMetric(cfg, list[0], (list[1] as num).toInt());
+                },
               ),
             ),
     );
   }
 
-  Widget _buildMetric(_MetricConfig cfg, MetricReading reading) {
-    final color = _statusColor(reading.level);
-    final value = reading.value;
-    const valueStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.w500);
+  Widget _buildMetric(_MetricConfig cfg, dynamic value, int status) {
+    final color = _statusColor(status);
     Widget body;
 
-    if (value == null) {
-      body = const Text('No reading', style: valueStyle);
-    } else {
-      switch (cfg.kind) {
-        case _MetricKind.progress:
-          if (value is! num) {
-            body = Text('$value', style: valueStyle);
-            break;
-          }
-          final progress = (value / cfg.max).clamp(0.0, 1.0).toDouble();
-          body = Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 10,
-                    color: color,
-                    backgroundColor: color.withValues(alpha: 0.2),
-                  ),
+    switch (cfg.kind) {
+      case _MetricKind.progress:
+        final num v = value as num;
+        final progress = (v / cfg.max).clamp(0.0, 1.0).toDouble();
+        body = Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 10,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.2),
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                '${_fmt(value)} / ${_fmt(cfg.max)}'
-                '${cfg.unit.isNotEmpty ? ' ${cfg.unit}' : ''}',
-              ),
-            ],
-          );
-        case _MetricKind.number:
-          final shown = value is num ? _fmt(value) : '$value';
-          body = Text(
-            '$shown${cfg.unit.isNotEmpty ? ' ${cfg.unit}' : ''}',
-            style: valueStyle,
-          );
-        case _MetricKind.yesNo:
-          body = Text(value == true ? 'Yes' : 'No', style: valueStyle);
-        case _MetricKind.list:
-          final items = value is List ? value : [value];
-          body = Text(
-            items.isEmpty ? 'None' : items.join(', '),
-            style: valueStyle,
-          );
-      }
+            ),
+            const SizedBox(width: 10),
+            Text('${_fmt(v)} / ${_fmt(cfg.max)}'),
+          ],
+        );
+        break;
+      case _MetricKind.number:
+        body = Text(
+          '${_fmt(value as num)}${cfg.unit.isNotEmpty ? ' ${cfg.unit}' : ''}',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        );
+        break;
+      case _MetricKind.yesNo:
+        body = Text(
+          (value == true) ? 'Yes' : 'No',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        );
+        break;
+      case _MetricKind.list:
+        final items = (value is List) ? value : <dynamic>[];
+        body = Text(
+          items.isEmpty ? 'None' : items.join(', '),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        );
+        break;
     }
 
     return Column(
@@ -352,50 +289,69 @@ class _StatusScreenState extends State<StatusScreen> {
         const SizedBox(height: 6),
         body,
         const SizedBox(height: 6),
-        _StatusChip(label: _statusLabel(reading.level), color: color),
+        _StatusChip(
+          label: _statusLabels[status.clamp(0, 3)],
+          color: color,
+        ),
       ],
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Health domains
+  // Historical status
   // ---------------------------------------------------------------------------
 
   Widget _buildHistorySection() {
-    final domains = AppData.instance.domains;
-    final assessedAt = AppData.instance.domainsAssessedAt;
+    final Map<dynamic, dynamic> domains = AppData.instance.domains;
+    final entries = domains.entries.toList();
 
     return _SectionCard(
       child: Column(
         children: [
           Expanded(
-            child: domains.isEmpty
-                ? const Center(child: Text('No assessment yet'))
+            child: entries.isEmpty
+                ? const Center(child: Text('No data available'))
                 : Scrollbar(
                     controller: _historyController,
                     thumbVisibility: true,
-                    child: ListView(
+                    child: ListView.separated(
                       controller: _historyController,
                       padding: const EdgeInsets.fromLTRB(12, 12, 20, 8),
-                      children: [
-                        if (assessedAt != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              'Assessed ${assessedAt.substring(0, 16).replaceFirst('T', ' ')} UTC',
-                              style: const TextStyle(fontSize: 12),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      itemBuilder: (context, i) {
+                        final name = entries[i].key.toString();
+                        final percent =
+                            (entries[i].value as num).toDouble().clamp(0.0, 100.0);
+                        final color = _percentColor(percent);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: LinearProgressIndicator(
+                                      value: percent / 100,
+                                      minHeight: 10,
+                                      color: color,
+                                      backgroundColor:
+                                          color.withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text('${_fmt(percent)} / 100'),
+                              ],
                             ),
-                          ),
-                        for (final entry in _domainLabels.entries)
-                          if (domains[entry.key] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: _buildDomain(
-                                entry.value,
-                                domains[entry.key]!,
-                              ),
-                            ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                   ),
           ),
@@ -407,7 +363,7 @@ class _StatusScreenState extends State<StatusScreen> {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                    MaterialPageRoute(builder: (_) => HistoryScreen())
                   );
                 },
                 icon: const Text('See full history'),
@@ -417,45 +373,6 @@ class _StatusScreenState extends State<StatusScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDomain(String label, DomainScore domain) {
-    final color = _statusColor(domain.level);
-    final score = domain.score;
-    // A lower-bound score means some inputs were missing, but the known points
-    // already prove at least this warning level.
-    final scoreText = score == null
-        ? 'Not assessed'
-        : '${domain.lowerBound ? 'at least ' : ''}${_fmt(score)} / 100 risk points';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            _StatusChip(label: _statusLabel(domain.level), color: color),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: score == null ? 0 : (score / 100).clamp(0.0, 1.0).toDouble(),
-            minHeight: 10,
-            color: color,
-            backgroundColor: color.withValues(alpha: 0.2),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(scoreText, style: const TextStyle(fontSize: 12)),
-      ],
     );
   }
 }

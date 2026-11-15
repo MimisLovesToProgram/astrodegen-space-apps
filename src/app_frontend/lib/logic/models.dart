@@ -1,69 +1,87 @@
 library;
 
+import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
-import 'crew_api.dart';
-
-enum QuestionType { num, onetofive, yesno, symptoms }
+enum QuestionType {num, onetofive, yesno, list}
 
 class Question {
-  Question({required this.title, required this.type, required this.field});
-  final String title;
-  final QuestionType type;
-  final String field;
-  Object? answer;
+  Question({
+    required this.title,
+    required this.type,
+  });
+
+  String title;
+  QuestionType type;
+
+  /// The answer depends on the type:
+  /// For (num), just an integer.
+  /// For onetofive, an int 1-5.
+  /// For yesno, 1 for yes, 0 for no.
+  /// Null means yet unanswered.
+  int? numAnswer;
+
+  /// For list questions
+  List<String>? listAns;
 }
 
+/// Singleton class for the current user
 class CurrentUser {
   CurrentUser._();
-  static final CurrentUser instance = CurrentUser._();
-  final CrewApi api = CrewApi();
-  String crewId = '';
+
+  static CurrentUser instance = CurrentUser._();
+
+  late String crewId;
 
   Future<bool> loginUser(String username, String password) async {
-    crewId = '';
-    final id = await api.login(username, password);
-    if (id == null) return false;
-    crewId = id;
-    await DateStorage.instance.loadForCrew(id);
-    return true;
+    // TODO: For now just give a random one. Simulate a wait
+    await Future.delayed(Duration(seconds: 5));
+
+    crewId = "a";
+
+    return true; // for success
   }
 
-  void logout() {
-    api.clearSession();
-    crewId = '';
+  Future<bool> signout() async {
+    await Future.delayed(Duration(seconds: 4));
+
+    crewId = "";
+
+    return true;
   }
 }
 
-class DateStorage {
-  DateStorage._();
-  static final DateStorage instance = DateStorage._();
-  late SharedPreferences shPref;
-  String? _crewId;
-  String? _lastDay;
 
-  static String dayKey(DateTime value) =>
-      value.toIso8601String().substring(0, 10);
+/// Singleton class for storing the last date the user opened the app (and finished the checkin)
+class DateStorage {
+
+  DateStorage._();
+
+  static DateStorage instance = DateStorage._();
+
+  /// Our instance of shared prefs
+  late SharedPreferences shPref;
+
+  late DateTime lastDateEntered;
 
   Future<void> init() async {
     shPref = await SharedPreferences.getInstance();
-  }
+  
+    final lastDateStr = shPref.getString("lastDate");
+    if (lastDateStr != null) {
 
-  Future<void> loadForCrew(String id) async {
-    _crewId = id;
-    _lastDay = shPref.getString('checkin-day-$id');
-  }
+      lastDateEntered = DateFormat("yyyy-MM-dd").parse(lastDateStr);
 
-  bool get needsCheckin => _lastDay != dayKey(DateTime.now());
+    } else {
+      lastDateEntered = DateTime.now().subtract(Duration(days: 1));
+    }
+  }
 
   Future<void> updateLastDate() async {
-    if (_crewId == null) throw StateError('A crew session is required.');
-    final day = dayKey(DateTime.now());
-    if (!await shPref.setString('checkin-day-$_crewId', day)) {
-      throw const CrewApiException(
-        'Check-in saved, but the local reminder could not be updated.',
-      );
-    }
-    _lastDay = day;
+    final now = DateTime.now();
+    lastDateEntered = now;
+    await shPref.setString("lastDate", "${now.year}-${now.month}-${now.day}");
   }
+
 }

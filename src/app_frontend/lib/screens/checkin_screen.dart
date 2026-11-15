@@ -1,151 +1,336 @@
-import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
+import 'package:app_frontend/screens/status_screen.dart';
+import 'package:flutter/material.dart';
 
-import '../logic/models.dart';
-import '../logic/view_models.dart';
-import 'login_screen.dart';
-import 'status_screen.dart';
+import 'package:app_frontend/logic/view_models.dart';
+import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/screens/login_screen.dart';
+import 'package:flutter/services.dart';
 
 class CheckinScreen extends StatefulWidget {
   const CheckinScreen({super.key});
+
   @override
   State<CheckinScreen> createState() => _CheckinScreenState();
 }
 
 class _CheckinScreenState extends State<CheckinScreen> {
-  int currentQuestionIndx = 0;
-  bool gettingSensorData = false;
 
-  Future<void> advance() async {
-    final data = AppData.instance;
-    if (data.checkinQuestions[currentQuestionIndx].answer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid answer before continuing.'),
-        ),
-      );
-      return;
-    }
-    if (currentQuestionIndx + 1 < data.checkinQuestions.length) {
-      setState(() => currentQuestionIndx++);
-      return;
-    }
-    setState(() => gettingSensorData = true);
-    try {
-      await data.submitCheckin();
-      await data.loadSensorData(CurrentUser.instance.crewId);
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StatusScreen()),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
-    } finally {
-      if (mounted) setState(() => gettingSensorData = false);
-    }
-  }
+  /// The index of our current question
+  int currentQuestionIndx = 0;
+
+  bool gettingSensorData = false;
 
   @override
   Widget build(BuildContext context) {
-    final questions = AppData.instance.checkinQuestions;
-    final current = questions[currentQuestionIndx];
+    
+    final currentQuestion = AppData.instance.checkinQuestions[currentQuestionIndx];
+
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.lightBlue,
-        title: const Text('Quick Check-In'),
+        title: Center(
+          child: Text(
+            "Quick Check-In",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold
+            )
+          )
+        ),
       ),
+
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/checkin_screen.png', fit: BoxFit.fill),
+            child: Image.asset(
+              "assets/checkin_screen.png",
+              fit: BoxFit.fill,
+            ),
           ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('${currentQuestionIndx + 1} / ${questions.length}'),
-                  const SizedBox(height: 16),
-                  Text(
-                    current.title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                  const SizedBox(height: 20),
-                  if (current.type == QuestionType.num)
-                    SizedBox(
-                      width: 180,
-                      child: NumTextField(key: ObjectKey(current), q: current),
-                    ),
-                  if (current.type == QuestionType.num)
+
+          Positioned.fill(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                
+                    Spacer(),
+
                     Text(
-                      current.field == 'sleep_h'
-                          ? 'Enter 0–24 hours.'
-                          : 'Enter 0–500 percent.',
+                      currentQuestion.title,
+                      style: TextStyle(fontSize: 24),
+                      textAlign: TextAlign.center,
                     ),
-                  if (current.type == QuestionType.onetofive)
-                    OneToFiveSlider(key: ObjectKey(current), q: current),
-                  if (current.type == QuestionType.symptoms)
-                    SymptomsInput(key: ObjectKey(current), q: current),
-                  if (current.type == QuestionType.yesno)
+                    SizedBox(height: 15),
+                
+                    // Give each input form a key
+                    // If it's a number question, give a text field to get the answer
+                    if (currentQuestion.type == QuestionType.num)
+                      SizedBox(
+                        width: 150,
+                        child: NumTextField(key: ObjectKey(currentQuestion), q: currentQuestion)
+                      ),
+
+                    // If it's a list, give a text field for text
+                    if (currentQuestion.type == QuestionType.list)
+                      ListTextField(key: ObjectKey(currentQuestion), q: currentQuestion),
+                
+                    // If it's a 1-5, give a slider
+                    if (currentQuestion.type == QuestionType.onetofive)
+                      OneToFiveSlider(key: ObjectKey(currentQuestion), q: currentQuestion),
+                
+                    // If it's a yes / no, show 2 respective buttons
+                    if (currentQuestion.type == QuestionType.yesno)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+
+                          // No button
+                          SizedBox(
+                            width: 115,
+                            height: 55,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 255, 100, 100)),
+                              onPressed: () async {
+                                currentQuestion.numAnswer = 0;
+                                
+                                if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
+                                 
+                                  setState(() {
+                                    currentQuestionIndx++;
+                                  });
+
+                                } else {
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
+                                }
+                              },
+                            
+                              child: Text("No", style: TextStyle(fontSize: 18)),
+                            ),
+                          ),
+
+                          // Yes button
+                          SizedBox(
+                            width: 115,
+                            height: 55,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 142, 250, 18)),
+                              onPressed: () async {
+                                currentQuestion.numAnswer = 1;
+
+                                if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
+                                  
+                                  setState(() {
+                                    currentQuestionIndx++;
+                                  });
+
+                                } else {
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+                                  
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
+                                }
+                              },
+                            
+                              child: Text("Yes", style: TextStyle(fontSize: 18, color: Colors.grey.shade800)),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    Spacer(),
+
+                    // If we're not on the first question, show the back button.
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        for (final answer in [0, 1])
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: ChoiceChip(
-                              label: Text(answer == 1 ? 'Yes' : 'No'),
-                              selected: current.answer == answer,
-                              onSelected: gettingSensorData
-                                  ? null
-                                  : (_) =>
-                                        setState(() => current.answer = answer),
+
+                        if (currentQuestionIndx > 0)
+                          SizedBox(
+                            width: 110,
+                            height: 50,
+                            child: FilledButton(
+                              onPressed: () {
+                                setState(() {
+                                  currentQuestionIndx--;
+                                });
+                              },
+                            
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.arrow_back),
+                                  Text(" Back", style: TextStyle(fontSize: 16)),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        Spacer(),
+
+                        // If we're not on the last question, show the next button.
+                        if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length)
+                          SizedBox(
+                            width: 110,
+                            height: 50,
+                            child: FilledButton(
+
+                              onPressed: () {
+                                if (currentQuestion.numAnswer != null) {
+                                
+                                  setState(() {
+                                    currentQuestionIndx++;
+                                  });
+
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Can't continue with no answer given!"),
+                                      showCloseIcon: true,
+                                      duration: Duration(seconds: 4),
+                                      padding: EdgeInsets.all(10),
+                                    )
+                                  );
+                                }
+
+                              },
+                            
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text("Next ", style: TextStyle(fontSize: 16)),
+                                  Icon(Icons.arrow_forward),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        // If we are on the last question, show the submit button.
+                        if (currentQuestionIndx + 1 == AppData.instance.checkinQuestions.length)
+                          SizedBox(
+                            width: 110,
+                            height: 50,
+                            child: FilledButton(
+
+                              onPressed: () async {
+                                if (currentQuestion.numAnswer != null) {
+                                
+                                  setState(() {
+                                    gettingSensorData = true;
+                                  });
+
+                                  await AppData.instance.loadSensorData(CurrentUser.instance.crewId);
+                                  
+                                  setState(() {
+                                    gettingSensorData = false;
+                                  });
+
+                                  await DateStorage.instance.updateLastDate();
+
+                                  if (!context.mounted) return;
+
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => StatusScreen())
+                                  );
+
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Can't continue with no answer given!"),
+                                      showCloseIcon: true,
+                                      duration: Duration(seconds: 4),
+                                      padding: EdgeInsets.all(10),
+                                    )
+                                  );
+                                }
+
+                              },
+                            
+                              child: Text("Submit"),
                             ),
                           ),
                       ],
                     ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (currentQuestionIndx > 0)
-                        TextButton(
-                          onPressed: gettingSensorData
-                              ? null
-                              : () => setState(() => currentQuestionIndx--),
-                          child: const Text('Back'),
-                        ),
-                      FilledButton(
-                        onPressed: gettingSensorData ? null : advance,
-                        child: Text(
-                          currentQuestionIndx + 1 == questions.length
-                              ? 'Submit'
-                              : 'Next',
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+
+                  ],
+                ),
+              )
             ),
           ),
+
+
+          // Loading (waiting for the sensor data)
           if (gettingSensorData)
-            const Positioned.fill(
-              child: ColoredBox(
-                color: Color.fromARGB(150, 10, 0, 0),
-                child: Center(child: CircularProgressIndicator()),
+            Positioned.fill(
+              child: Container(
+                color: const Color.fromARGB(150, 10, 0, 0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+
+                      Text(
+                        "Waiting for sensor data",
+                        style: TextStyle(fontSize: 26, color: Colors.white),
+                      ),
+
+                      SizedBox(height: 15),
+
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 6,
+                        )
+                      )
+
+                    ],
+                  ),
+                )
               ),
             ),
         ],
       ),
     );
+
   }
+
 }
 
 class NumTextField extends StatefulWidget {
@@ -158,39 +343,60 @@ class NumTextField extends StatefulWidget {
 }
 
 class _NumTextFieldState extends State<NumTextField> {
-  late final TextEditingController numController;
 
-  @override
-  void initState() {
-    super.initState();
-    numController = TextEditingController(
-      text: widget.q.answer?.toString() ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    numController.dispose();
-    super.dispose();
-  }
+  TextEditingController numController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
+    
     return TextField(
       controller: numController,
       decoration: fieldDecoration("Answer"),
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[0-9.]"))],
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+      ],
 
       onChanged: (value) {
-        final ans = num.tryParse(value);
-        final max = widget.q.field == 'sleep_h' ? 24 : 500;
-        widget.q.answer = ans != null && ans.isFinite && ans >= 0 && ans <= max
-            ? ans
-            : null;
+        int? ans = int.tryParse(value);
+        if (ans != null) {
+          widget.q.numAnswer = ans;
+        }
       },
     );
+
   }
+
+}
+
+class ListTextField extends StatefulWidget {
+  const ListTextField({super.key, required this.q});
+
+  final Question q;
+
+  @override
+  State<ListTextField> createState() => _ListTextFieldState();
+}
+
+class _ListTextFieldState extends State<ListTextField> {
+
+  TextEditingController listTextController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+
+    return TextField(
+      controller: listTextController,
+      decoration: fieldDecoration("Symptoms List"),
+
+      onChanged: (value) {
+        final symptoms = value.split(",");
+        widget.q.listAns = symptoms;
+      },
+    );
+
+  }
+
 }
 
 class OneToFiveSlider extends StatefulWidget {
@@ -203,82 +409,44 @@ class OneToFiveSlider extends StatefulWidget {
 }
 
 class _OneToFiveSliderState extends State<OneToFiveSlider> {
+
   int sliderValue = 3;
 
   @override
   void initState() {
     super.initState();
 
-    sliderValue = (widget.q.answer as int?) ?? 3;
-    widget.q.answer = sliderValue;
+    widget.q.numAnswer = 3;
   }
 
   @override
   Widget build(BuildContext context) {
+    
     return Column(
       children: [
+
         Slider(
           label: sliderValue.toString(),
           divisions: 4,
           max: 5,
           min: 1,
           value: sliderValue.toDouble(),
-
+          
           onChanged: (value) {
             setState(() {
               sliderValue = value.toInt();
-              widget.q.answer = sliderValue;
             });
           },
         ),
 
-        Text(sliderValue.toString(), style: TextStyle(fontSize: 20)),
+        Text(
+          sliderValue.toString(),
+          style: TextStyle(fontSize: 20)
+        )
+
       ],
     );
-  }
-}
 
-class SymptomsInput extends StatefulWidget {
-  const SymptomsInput({super.key, required this.q});
-  final Question q;
-  @override
-  State<SymptomsInput> createState() => _SymptomsInputState();
-}
-
-class _SymptomsInputState extends State<SymptomsInput> {
-  late Set<String> selected;
-  @override
-  void initState() {
-    super.initState();
-    selected = Set<String>.from(widget.q.answer as List<String>? ?? []);
-    widget.q.answer = selected.toList();
   }
 
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      const Text('Select all that apply, or leave empty for no symptoms.'),
-      Wrap(
-        spacing: 8,
-        children: ['sore throat', 'fatigue', 'headache', 'nausea', 'other']
-            .map(
-              (name) => FilterChip(
-                label: Text(name),
-                selected: selected.contains(name),
-                onSelected: (value) {
-                  setState(() {
-                    if (value) {
-                      selected.add(name);
-                    } else {
-                      selected.remove(name);
-                    }
-                    widget.q.answer = selected.toList()..sort();
-                  });
-                },
-              ),
-            )
-            .toList(),
-      ),
-    ],
-  );
 }
