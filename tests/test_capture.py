@@ -52,7 +52,7 @@ class CaptureTests(unittest.TestCase):
         connection = connect_database(self.db)
         try:
             self.assertEqual(connection.execute("SELECT payload, sensor_packet_id FROM raw_measurements").fetchone(), ("{}", None))
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
             self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
         finally:
             connection.close()

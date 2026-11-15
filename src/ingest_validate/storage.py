@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 # The inbox owns original deliveries, raw_measurements records metric outcomes,
 # and validated_observations contains only unique, accepted normalized data.
 SCHEMA = """
@@ -48,6 +48,31 @@ CREATE TABLE IF NOT EXISTS validated_observations (
 );
 CREATE INDEX IF NOT EXISTS observations_history
 ON validated_observations (astronaut_id, captured_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS quality_checks (
+    scope_key TEXT PRIMARY KEY,
+    policy_key TEXT NOT NULL,
+    policy_name TEXT NOT NULL,
+    astronaut_id TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    policy_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS quality_alerts (
+    alert_key TEXT PRIMARY KEY,
+    scope_key TEXT NOT NULL,
+    policy_name TEXT NOT NULL,
+    astronaut_id TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    source TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('missing','stale','future','sampling_gap')),
+    status TEXT NOT NULL CHECK (status IN ('active','resolved')),
+    first_detected_at TEXT NOT NULL,
+    last_checked_at TEXT NOT NULL,
+    resolved_at TEXT,
+    occurrences INTEGER NOT NULL,
+    evidence_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS quality_alert_scope ON quality_alerts(scope_key,status);
+CREATE INDEX IF NOT EXISTS quality_alert_history ON quality_alerts(astronaut_id,last_checked_at DESC);
 """
 
 

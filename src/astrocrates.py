@@ -42,6 +42,14 @@ class LocalTelemetry:
         return {"packets": {"pending": packets.get("pending", 0), "processed": packets.get("processed", 0)},
                 "results": [{"source": row[0], "status": row[1], "total": row[2]} for row in rows]}
 
+    def save_quality_alerts(self, snapshot):
+        from ingest_validate.alerts import save_quality_alerts
+        return save_quality_alerts(snapshot, self.db_path)
+
+    def list_quality_alerts(self, **options):
+        from ingest_validate.alerts import list_quality_alerts
+        return list_quality_alerts(self.db_path, **options)
+
 
 def sensor_batches(mode="story", ticks=None):
     """Yield one bounded crew tick, its validation clock, and UTC assumption.
