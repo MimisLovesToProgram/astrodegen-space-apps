@@ -367,6 +367,7 @@ class PocketBaseStore:
         self.client = client
         self._astronaut_ids = {}
         self._reading_keys = {}
+        self._mission_days = {}
 
     @classmethod
     def from_environment(cls, env_file=None):
@@ -408,7 +409,7 @@ class PocketBaseStore:
 
     # -- sensor_readings --------------------------------------------------
 
-    def _reading_keys(self, astronaut_id):
+    def _key_set(self, astronaut_id):
         """Existing (sensor_type, captured_at epoch) pairs for dedupe."""
         if astronaut_id in self._reading_keys:
             return self._reading_keys[astronaut_id]
@@ -444,9 +445,10 @@ class PocketBaseStore:
         astronaut_id = self.astronaut_id(crew_id)
         captured_at = observation["captured_at"]
         key = (sensor_type, _epoch(captured_at))
-        if key in self._reading_keys(astronaut_id):
+        if key in self._key_set(astronaut_id):
             return "duplicate"
-        mission_day = self._mission_day_for(crew_id, captured_at)
+        mission_day = self._mission_days.get(
+            (crew_id, _epoch(captured_at)))
         self.client.request(
             "POST", "/api/collections/sensor_readings/records",
             {
@@ -458,33 +460,39 @@ class PocketBaseStore:
                 "mission_day": mission_day,
             },
         )
-        self._reading_keys(astronaut_id).add(key)
+        self._key_set(astronaut_id).add(key)
         return "accepted"
-
-    def _mission_day_for(self, crew_id, captured_at):
-        """Best-effort mission_day lookup from already-ingested packets."""
-        return self._pending_mission_days.get(
-            (crew_id, _epoch(captured_at)))
-
-    _pending_mission_days = {}
 
     def parse_packets(self, packets, *, assume_utc=False, reference_time=None):
         """Run the Step 1->2 parser and store accepted observations.
 
+        mission_day observations arrive last within each packet, so the
+        batch is validated first and the day map is built before any
+        sensor_readings row is written.
+
         Returns counts of accepted, quarantined, and duplicate outcomes.
         """
+        accepted = []
         counts = {"accepted": 0, "quarantined": 0, "duplicates": 0}
         for raw in sensor_observations(packets, assume_utc=assume_utc):
             result = validate_observation(raw, reference_time=reference_time)
             observation = result["observation"]
             if observation is None:
                 counts["quarantined"] += 1
-                continue
+            else:
+                accepted.append(observation)
+
+        self._mission_days = {
+            (obs["astronaut_id"], _epoch(obs["captured_at"])): obs["value"]
+            for obs in accepted if obs["metric"] == "mission_day"
+        }
+        for observation in accepted:
             outcome = self.ingest_observation(observation)
             if outcome == "duplicate":
                 counts["duplicates"] += 1
             elif outcome:
                 counts["accepted"] += 1
+        self._mission_days = {}
         return counts
 
     # -- history + assessments --------------------------------------------
