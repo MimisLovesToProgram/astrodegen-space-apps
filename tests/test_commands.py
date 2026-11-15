@@ -83,6 +83,22 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(watched["alert_changes"]["opened"], 1)
             self.assertEqual(len(run("alerts", "--astronaut-id", "b")), 1)
 
+    def test_real_checkin_does_not_use_future_simulator_clock(self):
+        from datetime import timezone
+        from unittest.mock import Mock
+        from astrocrates import report_processed
+        from assessment_fixtures import observation, sample_policy
+        store = Mock()
+        store.get_history.return_value = [observation(captured_at="2099-01-01T12:00:00Z")]
+        store.enqueue_assessment.return_value = {"id": "job"}
+        accepted = observation(metric="mood", context={"simulated": False})
+        before = datetime.now(timezone.utc)
+        report_processed(store, {"packet_ids": ["packet"], "ingestion": {
+            "accepted": [accepted], "duplicates": [], "quarantined": [], "conflicts": []}}, sample_policy())
+        clock = store.enqueue_assessment.call_args.kwargs["as_of"]
+        self.assertGreaterEqual(clock, before)
+        self.assertLessEqual(clock, datetime.now(timezone.utc))
+
 
 if __name__ == "__main__":
     unittest.main()

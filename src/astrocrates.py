@@ -82,8 +82,7 @@ def sensor_batches(mode="story", ticks=None):
 
 
 def report_processed(store, result, assessment_policy=None, assessment_history_limit=10000, run_assessment=False):
-    # Export clean history for affected crews while stating explicitly that
-    # no actual health assessment engine has been configured yet.
+    # We export clean history and run assessment only with an explicit policy.
     ingestion = result["ingestion"]
     crew = sorted({item["astronaut_id"] for item in ingestion["accepted"]})
     output = {
@@ -99,7 +98,12 @@ def report_processed(store, result, assessment_policy=None, assessment_history_l
             # We reassess the latest clean state even when a newly accepted
             # reading arrived late and changes the preceding baseline window.
             history = store.get_history(astronaut, assessment_history_limit)
-            clock = max(datetime.fromisoformat(item["captured_at"].replace("Z", "+00:00")) for item in history)
+            # We keep a real check-in on the real clock even if this demo
+            # database also contains future-dated synthetic mission readings.
+            real_input = any(item["astronaut_id"] == astronaut and item.get("context", {}).get("simulated") is not True
+                             for item in ingestion["accepted"])
+            clock = datetime.now(timezone.utc) if real_input else max(
+                datetime.fromisoformat(item["captured_at"].replace("Z", "+00:00")) for item in history)
             queued.append(store.enqueue_assessment(history, astronaut, assessment_policy,
                                                    as_of=clock, history_limit=assessment_history_limit))
         output["assessment_jobs"] = queued
