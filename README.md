@@ -32,7 +32,7 @@ PYTHONPATH=src python3 -m astrocrates --backend sqlite capture --interval 0 --pr
 PYTHONPATH=src python3 -m astrocrates --backend sqlite history a
 ```
 
-For the shared API backend, follow the [PocketBase setup](backend/pocketbase/README.md).
+For the shared API backend, follow the [PocketBase setup](backend/README.md).
 
 ## Tests
 

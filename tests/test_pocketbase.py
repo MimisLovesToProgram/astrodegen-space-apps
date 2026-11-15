@@ -32,7 +32,7 @@ class PocketBaseTests(unittest.TestCase):
         cls.addClassCleanup(cls.log.close)
         root = Path(__file__).resolve().parents[1]
         options = ["--dir", str(Path(cls.directory.name) / "pb_data"),
-                   "--migrationsDir", str(root / "backend/pocketbase/pb_migrations")]
+                   "--migrationsDir", str(root / "backend/pb_migrations")]
         password = uuid.uuid4().hex
         binary = os.environ["POCKETBASE_TEST_BINARY"]
         subprocess.run([binary, "superuser", "create", "test@example.com", password, *options],
@@ -42,7 +42,7 @@ class PocketBaseTests(unittest.TestCase):
             port = sock.getsockname()[1]
         cls.url = f"http://127.0.0.1:{port}"
         process = subprocess.Popen([binary, "serve", "--http", f"127.0.0.1:{port}", *options,
-                                    "--hooksDir", str(root / "backend/pocketbase/pb_hooks")],
+                                    "--hooksDir", str(root / "backend/pb_hooks")],
                                    stdout=cls.log, stderr=cls.log)
         def stop():
             process.terminate()

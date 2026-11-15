@@ -26,7 +26,7 @@ def _private_file(path, mode="w"):
 
 def setup_local(binary=None, data_dir=None, env_dir=None, port=8090, keep_running=True):
     root = Path(__file__).resolve().parents[2]
-    backend = root / "backend/pocketbase"
+    backend = root / "backend"
     binary = Path(binary or backend / "pocketbase").resolve()
     data_dir = Path(data_dir or backend / "pb_data").resolve()
     env_dir = Path(env_dir or root).resolve()

@@ -1,3 +1,7 @@
-pocketbase
-CHANGELOG.md
-pocketbase/*
+# We keep executables and generated runtime data out of Git.
+/pocketbase
+/pocketbase.exe
+/pb_data/
+/CHANGELOG.md
+/POCKETBASE_*.md
+/*.zip

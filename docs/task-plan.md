@@ -40,7 +40,7 @@ The repository includes automated validation/storage tests and integration tests
 
 ## Folder and backend checkpoint
 
-The project now uses a single Astrocrates layout: `src/` (with the Flutter app in `src/app_frontend/`), `backend/pocketbase/`, `tests/`, and `docs/`. Step 1 saves timestamped packets before validation. Step 2 uses bounded, recoverable processing with atomic results and completion markers. Shared PocketBase APIs and offline SQLite use the same clean observation contract. The original simulator and Flutter source are preserved. Risk calculations and UI integration are still pending.
+The project now uses a single Astrocrates layout: `src/` (with the Flutter app in `src/app_frontend/`), `backend/`, `tests/`, and `docs/`. Step 1 saves timestamped packets before validation. Step 2 uses bounded, recoverable processing with atomic results and completion markers. Shared PocketBase APIs and offline SQLite use the same clean observation contract. The original simulator and Flutter source are preserved. Risk calculations and UI integration are still pending.
 
 ## Step 2 handoff checklist
 

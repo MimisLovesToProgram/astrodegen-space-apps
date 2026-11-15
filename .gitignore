@@ -27,3 +27,5 @@ build/
 # Local telemetry output (raw and validated records)
 /data/
 
+
+/backend/pb_data/

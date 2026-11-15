@@ -81,10 +81,10 @@ assessment = risk_engine.assess("a", history)
 
 The commands also export `step3_history` after processing. Without an actual risk engine, they explicitly report `assessment_status: "not_configured"`.
 
-Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew-specific frontend authorization, missing-data monitoring, and agreed risk formulas remain tasks in the [schedule](task-plan.md). See [PocketBase setup](../backend/pocketbase/README.md) for collection rules and real API tests.
+Ingestion completes before assessment. Failed assessments can reread clean history; replaying duplicate measurements does not automatically retry a callback. Durable assessment jobs, result persistence, crew-specific frontend authorization, missing-data monitoring, and agreed risk formulas remain tasks in the [schedule](task-plan.md). See [PocketBase setup](../backend/README.md) for collection rules and real API tests.
 
 ## Step 2 monitoring and configured local backend
 
 The local setup command (`python3 -m ingest_validate.setup`, with `PYTHONPATH=src`) backs up the existing database, provisions private service-role files, preserves the original administrator, and leaves the local server running. The common CLI reads `.env` or an explicit `--env-file`.
 
-`quality` reports missing/stale metrics and source acceptance counts using an explicit age policy. `contract` publishes the validator-derived schema, and `handoff` wraps clean history with `astrocrates.observation.v1`. See the [sensor contract](sensor-contract.md) and [backend guide](../backend/pocketbase/README.md) for commands and verified local results. These quality summaries do not calculate health risk.
+`quality` reports missing/stale metrics and source acceptance counts using an explicit age policy. `contract` publishes the validator-derived schema, and `handoff` wraps clean history with `astrocrates.observation.v1`. See the [sensor contract](sensor-contract.md) and [backend guide](../backend/README.md) for commands and verified local results. These quality summaries do not calculate health risk.

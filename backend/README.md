@@ -4,7 +4,7 @@ PocketBase owns its database and exposes the record APIs used by Astrocrates. Py
 
 ## Start locally
 
-The executable is installed at `backend/pocketbase/pocketbase`. On a fresh installation, create the first administrator through PocketBase's installer before running service setup. Existing administrators and data are preserved.
+The executable is installed at `backend/pocketbase`. On a fresh installation, create the first administrator through PocketBase's installer before running service setup. Existing administrators and data are preserved.
 
 From the repository root, while the local server is stopped:
 
@@ -61,7 +61,7 @@ The offline SQLite backend is still available via `--backend sqlite`. Existing l
 From the repository root, with the downloaded executable:
 
 ```bash
-POCKETBASE_TEST_BINARY="$PWD/backend/pocketbase/pocketbase" \
+POCKETBASE_TEST_BINARY="$PWD/backend/pocketbase" \
   PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
@@ -89,4 +89,4 @@ The quality command reports missing expected metrics, stale readings, future-clo
 
 Per-source data acceptance rate is `accepted / (accepted + quarantined + conflicts)`. Duplicates are reported separately and cannot inflate the rate. This is a data-quality indicator, not a clinical score or calibrated sensor-reliability estimate.
 
-The local verification record and sample handoff exports are in ignored `data/step2-verification.json`, `data/observation-contract-v1.json`, and `data/step3-history-a.json`. Original mission packets plus follow-up audit checks currently account for 44 processed deliveries and 252 clean observations. These are synthetic demo records. See the [versioned sensor contract](../../docs/sensor-contract.md) for the Step 1/2/3 boundary.
+The local verification record and sample handoff exports are in ignored `data/step2-verification.json`, `data/observation-contract-v1.json`, and `data/step3-history-a.json`. Original mission packets plus follow-up audit checks currently account for 44 processed deliveries and 252 clean observations. These are synthetic demo records. See the [versioned sensor contract](../docs/sensor-contract.md) for the Step 1/2/3 boundary.
