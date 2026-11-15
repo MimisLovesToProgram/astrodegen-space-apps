@@ -4,6 +4,7 @@ import 'package:app_frontend/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:app_frontend/logic/view_models.dart';
+import 'package:app_frontend/logic/status_logic.dart';
 
 /// Status colors (0 = Good, 1 = Watch, 2 = Warning, 3 = Alert).
 const List<Color> _statusColors = [
@@ -47,7 +48,7 @@ const Map<String, _MetricConfig> _metricConfigs = {
   'sleep_quality':
       _MetricConfig('Sleep quality', _MetricKind.progress, max: 5),
   'mood': _MetricConfig('Mood', _MetricKind.progress, max: 5),
-  'symptoms': _MetricConfig('Symptoms', _MetricKind.number),
+  'symptoms': _MetricConfig('Symptoms', _MetricKind.list),
   'exercise_logged': _MetricConfig('Exercise today', _MetricKind.yesNo),
   'social_interaction':
       _MetricConfig('Social interaction today', _MetricKind.yesNo),
@@ -94,7 +95,7 @@ class _StatusScreenState extends State<StatusScreen> {
       final keys = all.keys.map((k) => k.toString()).toList()..sort();
       entry = all[keys.last];
     }
-    return Map<String, dynamic>.from(entry as Map);
+    return latestReadings(entry);
   }
 
   Color _statusColor(int status) =>
@@ -119,16 +120,17 @@ class _StatusScreenState extends State<StatusScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.black,
         title: const Row(
           children: [
-            Icon(Icons.rocket_launch),
+            Icon(Icons.rocket_launch, color: Colors.white),
             SizedBox(width: 8),
-            Text('Astrocrates'),
+            Text('Astrocrates', style: TextStyle(color: Colors.white),),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: Colors.white,),
             tooltip: 'Log out',
             onPressed: () async {
               setState(() {
@@ -156,6 +158,13 @@ class _StatusScreenState extends State<StatusScreen> {
       body: Stack(
         children: [
 
+          // A background image
+          Positioned.fill(
+            child: Container(
+              color: Color.fromARGB(255, 255, 240, 208)
+            )
+          ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -177,26 +186,27 @@ class _StatusScreenState extends State<StatusScreen> {
           ),
 
           // For the loading indicator
-          Positioned.fill(
-            child: Container(
-              color: const Color.fromARGB(150, 0, 0, 0),
-              child: Column(
-                children: [
+          if (isLoading)
+            Positioned.fill(
+              child: Container(
+                color: const Color.fromARGB(150, 0, 0, 0),
+                child: Column(
+                  children: [
 
-                  Text("Signout..."),
-                  SizedBox(
-                    height: 50,
-                    width: 50,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 8,                      
-                    ),
-                  )
+                    Text("Signout...", style: TextStyle(fontSize: 20, color: Colors.white),),
+                    SizedBox(
+                      height: 50,
+                      width: 50,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 6,                      
+                      ),
+                    )
 
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -227,8 +237,10 @@ class _StatusScreenState extends State<StatusScreen> {
                 itemBuilder: (context, i) {
                   final key = entries[i].key;
                   final cfg = entries[i].value;
-                  final list = data[key] as List;
-                  return _buildMetric(cfg, list[0], (list[1] as num).toInt());
+                  final value = data[key];
+                  final status =
+                      statusFor(key, value, AppData.instance.sensorAndUserData);
+                  return _buildMetric(cfg, value, status);
                 },
               ),
             ),
@@ -360,6 +372,7 @@ class _StatusScreenState extends State<StatusScreen> {
             child: Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(backgroundColor: Colors.amber),
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -391,6 +404,7 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(16),
+        color: Colors.grey.shade100
       ),
       clipBehavior: Clip.antiAlias,
       child: child,

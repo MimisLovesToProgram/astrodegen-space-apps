@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:app_frontend/logic/models.dart';
+import 'package:app_frontend/logic/view_models.dart';
 import 'package:app_frontend/screens/checkin_screen.dart';
 import 'package:app_frontend/screens/status_screen.dart';
 import 'package:flutter/material.dart';
@@ -91,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           SizedBox(height: 20),
                       
                           Text(
-                            "Login to Astrokratis",
+                            "Login to Astrokrates",
                             style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
@@ -149,13 +150,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   loggingIn = true;
                                 });
 
-                                final success = await CurrentUser.instance.loginUser(usernameController.text, passwordController.text);
+                                final success = CurrentUser.instance.loginUser(usernameController.text, passwordController.text);
 
                                 setState(() {
                                   loggingIn = false;
                                 });
-
-                                if (!context.mounted) return;
 
                                 if (success) {
 
@@ -165,6 +164,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                       MaterialPageRoute(builder: (_) => CheckinScreen())
                                     );
                                   } else {
+                                    // First get the data
+                                    await AppData.instance.loadSensorData(usernameController.text);
+
+                                    if (!context.mounted) return;
+
                                     Navigator.pushReplacement(
                                       context,
                                       MaterialPageRoute(builder: (_) => StatusScreen())

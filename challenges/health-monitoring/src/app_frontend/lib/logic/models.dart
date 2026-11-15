@@ -3,8 +3,9 @@ library;
 import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:pocketbase/pocketbase.dart';
 
-enum QuestionType {num, onetofive, yesno}
+enum QuestionType {num, onetofive, yesno, list}
 
 class Question {
   Question({
@@ -21,7 +22,7 @@ class Question {
   /// For yesno, 1 for yes, 0 for no.
   /// Null means yet unanswered.
   int? answer;
-  int? defaultAns;
+  List<String>? ansList;
 }
 
 /// Singleton class for the current user
@@ -30,15 +31,18 @@ class CurrentUser {
 
   static CurrentUser instance = CurrentUser._();
 
+  Map<String, String> usersAndPasswds = {"a": "a1234", "b": "b1234", "c": "c1234"};
+
   late String crewId;
 
-  Future<bool> loginUser(String username, String password) async {
-    // TODO: For now just give a random one. Simulate a wait
-    await Future.delayed(Duration(seconds: 5));
-
-    crewId = "a";
-
-    return true; // for success
+  bool loginUser(String username, String password) {
+    if ( usersAndPasswds.keys.contains(username) ) {
+      if ( usersAndPasswds[username] == password ) {
+        crewId = username;
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<bool> signout() async {
@@ -72,7 +76,7 @@ class DateStorage {
       lastDateEntered = DateFormat("yyyy-MM-dd").parse(lastDateStr);
 
     } else {
-      lastDateEntered = DateTime.now().subtract(Duration(days: 1));
+      lastDateEntered = DateTime.now();
     }
   }
 

@@ -74,6 +74,10 @@ class _CheckinScreenState extends State<CheckinScreen> {
                         width: 150,
                         child: NumTextField(key: ObjectKey(currentQuestion), q: currentQuestion)
                       ),
+
+                    // If it's a list question, give a list text field
+                    if (currentQuestion.type == QuestionType.list)
+                      ListTextField(key: ObjectKey(currentQuestion), q: currentQuestion),
                 
                     // If it's a 1-5, give a slider
                     if (currentQuestion.type == QuestionType.onetofive)
@@ -206,7 +210,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () {
-                                if (currentQuestion.answer != null) {
+                                if (currentQuestion.answer != null || currentQuestion.ansList != null) {
                                 
                                   setState(() {
                                     currentQuestionIndx++;
@@ -243,7 +247,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () async {
-                                if (currentQuestion.answer != null) {
+                                if (currentQuestion.answer != null || currentQuestion.ansList != null) {
                                 
                                   setState(() {
                                     gettingSensorData = true;
@@ -358,6 +362,35 @@ class _NumTextFieldState extends State<NumTextField> {
         if (ans != null) {
           widget.q.answer = ans;
         }
+      },
+    );
+
+  }
+
+}
+class ListTextField extends StatefulWidget {
+  const ListTextField({super.key, required this.q});
+
+  final Question q;
+
+  @override
+  State<ListTextField> createState() => _ListTextFieldState();
+}
+
+class _ListTextFieldState extends State<ListTextField> {
+
+  TextEditingController listAnsController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    
+    return TextField(
+      controller: listAnsController,
+      decoration: fieldDecoration("Answer"),
+
+      onChanged: (value) {
+        final ansList = value.split(",");
+        widget.q.ansList = ansList;
       },
     );
 

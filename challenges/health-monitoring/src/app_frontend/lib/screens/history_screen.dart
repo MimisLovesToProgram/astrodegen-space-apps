@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:app_frontend/logic/status_logic.dart';
 import 'package:app_frontend/logic/view_models.dart';
 
 enum _Kind { progress, number, yesNo }
@@ -62,25 +63,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
   // Data helpers
   // ---------------------------------------------------------------------------
 
-  /// date-only DateTime -> that day's metrics map (key -> [value, status]).
+  /// date-only DateTime -> that day's metrics map (key -> latest value).
   Map<DateTime, Map<String, dynamic>> _daysByDate() {
     final Map<dynamic, dynamic> all = AppData.instance.sensorAndUserData;
     final result = <DateTime, Map<String, dynamic>>{};
     all.forEach((k, v) {
       final parsed = DateTime.tryParse(k.toString());
-      if (parsed == null || v is! Map) return;
+      if (parsed == null) return;
       result[DateTime(parsed.year, parsed.month, parsed.day)] =
-          Map<String, dynamic>.from(v);
+          latestReadings(v);
     });
     return result;
   }
 
-  /// Value (index 0) of a metric on a given day, or null if missing.
-  dynamic _valueOf(Map<String, dynamic> day, String key) {
-    final entry = day[key];
-    if (entry is List && entry.isNotEmpty) return entry[0];
-    return null;
-  }
+  /// Value of a metric on a given day, or null if missing.
+  dynamic _valueOf(Map<String, dynamic> day, String key) => day[key];
 
   /// Average of a metric over the given days. For yes/no metrics this is the
   /// number of "yes" days. Returns null when there is no data.
@@ -89,9 +86,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     int count = 0;
     for (final day in days) {
       final v = _valueOf(day, key);
-      if (v == null) continue;
       if (metric.kind == _Kind.yesNo) {
         sum += (v == true) ? 1 : 0;
+      } else if (v is List) {
+        sum += v.length; // symptoms: number of symptoms
       } else if (v is num) {
         sum += v.toDouble();
       } else {
@@ -124,25 +122,41 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return Scaffold(
       // The back arrow is added automatically when this screen is pushed.
-      appBar: AppBar(title: const Text('My History')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Long-term ratings',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Expanded(flex: 1, child: _buildLongTerm(byDate)),
-              const SizedBox(height: 16),
-              Text('Weekly history',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Expanded(flex: 1, child: _buildWeekly(byDate)),
-            ],
+      appBar: AppBar(
+        title: const Text('My History', style: TextStyle(color: Colors.white),), 
+        backgroundColor: Colors.black,
+        leading: BackButton()
+      ),
+      body: Stack(
+        children: [
+          // Add a background img
+          Positioned.fill(
+            child: Image.asset(
+              "assets/checkin_screen.png",
+              fit: BoxFit.fill,
+            ),
           ),
-        ),
+
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Long-term ratings',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Expanded(flex: 1, child: _buildLongTerm(byDate)),
+                  const SizedBox(height: 16),
+                  Text('Weekly history',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Expanded(flex: 1, child: _buildWeekly(byDate)),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -319,6 +333,7 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(16),
+        color: Colors.grey.shade100
       ),
       clipBehavior: Clip.antiAlias,
       child: child,

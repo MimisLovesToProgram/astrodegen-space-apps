@@ -9,8 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  google_fonts: ^9.0.0
   http: ^1.6.0
   intl: ^0.20.3
+  pocketbase: ^0.26.0
   shared_preferences: ^2.5.6
 
 dev_dependencies:
@@ -22,3 +24,23 @@ flutter:
   uses-material-design: true
   assets:
   - assets/
+
+  fonts:
+    - family: Firjar
+      fonts:
+        - asset: assets/fonts/Firjar-Thin.ttf
+          weight: 100
+        - asset: assets/fonts/Firjar-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/Firjar-Light.ttf
+          weight: 300
+        - asset: assets/fonts/Firjar-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Firjar-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Firjar-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Firjar-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Firjar-ExtraBold.ttf
+          weight: 800
