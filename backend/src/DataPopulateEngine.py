@@ -1,40 +1,116 @@
 """Step 3 assessment engine.
 
 Bootstraps the synthetic sensor generator, parses packets through the
-ingest_validate adapter/validator, stores accepted readings in the local
-PocketBase sensor_readings collection, scores each crew member against the
-rules in health_data.py, and posts one domain_assessments record per domain.
+vendored ingest_validate adapter/validator, stores accepted readings in the
+local PocketBase sensor_readings collection, scores each crew member against
+the rules in health_data.py, and posts one domain_assessments record per
+domain.
 
-Run from the repository root:
+Everything this file needs lives under backend/src: the generator
+(biosensors.py), the parser (ingest_validate/), the thresholds
+(health_data.py), and this module. PocketBase credentials come from
+backend/.env (POCKETBASE_URL plus POCKETBASE_TOKEN, or POCKETBASE_EMAIL and
+POCKETBASE_PASSWORD for the _superusers collection).
 
-    PYTHONPATH=backend/src python3 backend/src/assesmentEngine.py
-    PYTHONPATH=backend/src python3 backend/src/assesmentEngine.py --mode noise --ticks 5
+Run from anywhere:
+
+    python3 backend/src/assesmentEngine.py
+    python3 backend/src/assesmentEngine.py --mode noise --ticks 5
 """
 
 import argparse
 import json
+import secrets
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-# The ingestion pipeline lives in the repository's src/ package; this file
-# lives in backend/src/, so both directories are added explicitly.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO_ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import biosensors
 import health_data
-from astrocrates import sensor_batches
+from biosensors import Crew, noise_from, reading_from
 from ingest_validate.adapters import sensor_observations
 from ingest_validate.config import connection_settings
 from ingest_validate.pipeline import simulated_mission
-from ingest_validate.pocketbase import PocketBaseTelemetry
 from ingest_validate.validation import validate_observation
 
 
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_ENV_FILE = BACKEND_DIR / ".env"
+
+# Synthetic crew accounts are provisioned as astronaut auth records with a
+# stable email per crew_id so engine runs are idempotent.
+CREW_EMAIL_DOMAIN = "astrocrates.local"
+
+
+class PocketBaseError(RuntimeError):
+    def __init__(self, status, message):
+        self.status = status
+        super().__init__(f"PocketBase HTTP {status}: {message}")
+
+
+class PocketBaseClient:
+    """Minimal REST client for the three Step 3 collections."""
+
+    def __init__(self, url="http://127.0.0.1:8090", token=None, timeout=15):
+        parsed = urllib.parse.urlsplit(url)
+        if (parsed.scheme not in ("http", "https") or not parsed.netloc
+                or parsed.username or parsed.query or parsed.fragment):
+            raise ValueError(
+                "Provide an HTTP(S) PocketBase base URL without credentials, "
+                "query, or fragment")
+        self.url = url.rstrip("/")
+        self.token = token
+        self.timeout = timeout
+
+    def request(self, method, path, body=None, query=None):
+        suffix = "?" + urllib.parse.urlencode(query) if query else ""
+        headers = {"Content-Type": "application/json"}
+        if self.token:
+            headers["Authorization"] = self.token
+        request = urllib.request.Request(
+            self.url + path + suffix,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                payload = response.read()
+                return json.loads(payload) if payload else None
+        except urllib.error.HTTPError as error:
+            try:
+                message = json.loads(error.read()).get("message", "Request failed")
+            except (ValueError, AttributeError):
+                message = "Request failed"
+            raise PocketBaseError(error.code, message) from None
+
+    def authenticate(self, email, password):
+        response = self.request(
+            "POST", "/api/collections/_superusers/auth-with-password",
+            {"identity": email, "password": password})
+        self.token = response["token"]
+
+    @classmethod
+    def from_settings(cls, settings):
+        client = cls(settings.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
+                     settings.get("POCKETBASE_TOKEN"))
+        if not client.token:
+            email = settings.get("POCKETBASE_EMAIL")
+            password = settings.get("POCKETBASE_PASSWORD")
+            if not email or not password:
+                raise ValueError(
+                    "Set POCKETBASE_TOKEN or POCKETBASE_EMAIL and "
+                    "POCKETBASE_PASSWORD")
+            client.authenticate(email, password)
+        return client
+
+
 # The parser emits normalized metric names; health_data thresholds and the
-# PocketBase sensor_type field use a slightly different vocabulary.
+# PocketBase select field use a slightly different vocabulary.
 METRIC_ALIASES = {
     "hrv_rmssd": "hrv",
     "hr": "hr_resting",
@@ -57,9 +133,9 @@ DOMAIN_METRIC_ALIASES = {
     "social_interaction": "social_interaction",
 }
 
-# Validated observation metric -> sensor_readings.sensor_type select value.
-# mission_day is not a sensor_type; it is stored in its own number field.
-SENSOR_TYPE_BY_METRIC = {
+# Validated observation metric -> sensor_readings.select value.
+# mission_day is not a select option; it is stored in its own number field.
+SELECT_BY_METRIC = {
     "hr_resting": "hr_resting",
     "hrv_rmssd": "hrv",
     "spo2": "spo2",
@@ -357,11 +433,8 @@ def assess_history(astronaut_id, history):
 
 
 class PocketBaseStore:
-    """Thin REST wrapper over the three Step 3 collections.
-
-    Uses the shared PocketBaseTelemetry HTTP client; authentication is a
-    superuser token or email/password for the _superusers collection.
-    """
+    """Read/write wrapper over astronauts, sensor_readings, and
+    domain_assessments."""
 
     def __init__(self, client):
         self.client = client
@@ -372,36 +445,36 @@ class PocketBaseStore:
     @classmethod
     def from_environment(cls, env_file=None):
         settings = connection_settings(env_file)
-        client = PocketBaseTelemetry(
-            settings.get("POCKETBASE_URL", "http://127.0.0.1:8090"),
-            settings.get("POCKETBASE_TOKEN"),
-        )
-        if not client.token:
-            email = settings.get("POCKETBASE_EMAIL")
-            password = settings.get("POCKETBASE_PASSWORD")
-            if not email or not password:
-                raise ValueError(
-                    "Set POCKETBASE_TOKEN or POCKETBASE_EMAIL and "
-                    "POCKETBASE_PASSWORD")
-            client.authenticate(email, password, "_superusers")
-        return cls(client)
+        return cls(PocketBaseClient.from_settings(settings))
 
     # -- astronauts -------------------------------------------------------
 
     def astronaut_id(self, crew_id):
-        """Return the astronauts record id for a generator crew_id."""
+        """Return the astronauts auth record id for a generator crew_id.
+
+        Synthetic crew members are provisioned as auth users with a stable
+        email so repeated runs reuse the same record.
+        """
         if crew_id in self._astronaut_ids:
             return self._astronaut_ids[crew_id]
+        email = f"{crew_id}@{CREW_EMAIL_DOMAIN}"
         records = self.client.request(
             "GET", "/api/collections/astronauts/records",
-            query={"filter": f'crew_id="{crew_id}"', "perPage": 1},
+            query={"filter": f'email="{email}"', "perPage": 1},
         )["items"]
         if records:
             record_id = records[0]["id"]
         else:
+            password = secrets.token_urlsafe(24)
             record = self.client.request(
                 "POST", "/api/collections/astronauts/records",
-                {"crew_id": crew_id, "name": crew_id, "status": "active"},
+                {
+                    "email": email,
+                    "password": password,
+                    "passwordConfirm": password,
+                    "name": crew_id,
+                    "status": "active",
+                },
             )
             record_id = record["id"]
         self._astronaut_ids[crew_id] = record_id
@@ -410,7 +483,7 @@ class PocketBaseStore:
     # -- sensor_readings --------------------------------------------------
 
     def _key_set(self, astronaut_id):
-        """Existing (sensor_type, captured_at epoch) pairs for dedupe."""
+        """Existing (select, captured_at epoch) pairs for dedupe."""
         if astronaut_id in self._reading_keys:
             return self._reading_keys[astronaut_id]
         keys = set()
@@ -425,8 +498,8 @@ class PocketBaseStore:
                 },
             )["items"]
             for record in records:
-                if record.get("captured_at"):
-                    keys.add((record["sensor_type"], _epoch(record["captured_at"])))
+                if record.get("captured_at") and record.get("select"):
+                    keys.add((record["select"], _epoch(record["captured_at"])))
             if len(records) < 500:
                 break
             page += 1
@@ -438,8 +511,8 @@ class PocketBaseStore:
         crew_id = observation["astronaut_id"]
         metric = observation["metric"]
         if metric == "mission_day":
-            return None  # carried on each reading row, not a sensor_type
-        sensor_type = SENSOR_TYPE_BY_METRIC.get(metric)
+            return None  # carried on each reading row, not a select value
+        sensor_type = SELECT_BY_METRIC.get(metric)
         if sensor_type is None:
             return None
         astronaut_id = self.astronaut_id(crew_id)
@@ -453,7 +526,7 @@ class PocketBaseStore:
             "POST", "/api/collections/sensor_readings/records",
             {
                 "astronaut": astronaut_id,
-                "sensor_type": sensor_type,
+                "select": sensor_type,
                 "value": _serialize_value(observation["value"]),
                 "unit": observation["unit"],
                 "captured_at": _pb_datetime(captured_at),
@@ -514,9 +587,9 @@ class PocketBaseStore:
             for record in records:
                 history.append({
                     "astronaut_id": crew_id,
-                    "metric": record["sensor_type"],
+                    "metric": record["select"],
                     "value": _deserialize_value(
-                        record["sensor_type"], record["value"]),
+                        record["select"], record["value"]),
                     "unit": record.get("unit") or "",
                     "captured_at": record["captured_at"],
                 })
@@ -529,6 +602,8 @@ class PocketBaseStore:
         """Post one domain_assessments record per domain."""
         astronaut_id = self.astronaut_id(crew_id)
         for domain, result in assessment["domains"].items():
+            details = dict(result["details"])
+            details["assessed_at"] = assessment["assessed_at"]
             self.client.request(
                 "POST", "/api/collections/domain_assessments/records",
                 {
@@ -536,9 +611,42 @@ class PocketBaseStore:
                     "domain": domain,
                     "domain_status": result["domain_status"],
                     "risk_score": result["risk_score"],
-                    "details": result["details"],
+                    "details": details,
                 },
             )
+
+
+def sensor_batches(mode="story", ticks=None):
+    """Yield one bounded crew tick, its validation clock, and UTC assumption.
+
+    Mirrors astrocrates.sensor_batches: story packets carry the fixed
+    synthetic UTC clock; noise timestamps are converted from local time to
+    aware UTC before parsing.
+    """
+    if mode not in ("story", "noise"):
+        raise ValueError("mode must be story or noise")
+    if ticks is not None and (type(ticks) is not int or ticks < 1):
+        raise ValueError("ticks must be a positive integer")
+    if mode == "story":
+        days = min(len(arc) for arc in Crew.values())
+        if ticks is not None and ticks > days:
+            raise ValueError(f"The story has only {days} ticks")
+        for day in range(1, (ticks if ticks is not None else days) + 1):
+            packets = [reading_from(crew, arc[day - 1], day)
+                       for crew, arc in Crew.items()]
+            clock = datetime.fromisoformat(packets[0]["timestamp"]).replace(
+                tzinfo=timezone.utc)
+            yield packets, clock, True
+    else:
+        tick = 0
+        while ticks is None or tick < ticks:
+            packets = [noise_from(crew, tick) for crew in Crew]
+            for packet in packets:
+                packet["timestamp"] = datetime.fromisoformat(
+                    packet["timestamp"]).astimezone(
+                        timezone.utc).isoformat()
+            yield packets, None, False
+            tick += 1
 
 
 def ingest_packets(store, packets, *, assume_utc=False, reference_time=None):
@@ -591,8 +699,7 @@ def run_ticks(store, mode, ticks, interval):
 def main():
     parser = argparse.ArgumentParser(
         description="Assess crew health from the synthetic sensor pipeline")
-    parser.add_argument("--env-file",
-                        default=str(_REPO_ROOT / "backend" / ".env"),
+    parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE),
                         help="PocketBase settings file")
     parser.add_argument("--mode", choices=("story", "noise"), default="story",
                         help="story runs the fixed 7-day mission once; "
