@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'screens/login_screen.dart';
 import 'package:app_frontend/screens/checkin_screen.dart';
+import 'logic/models.dart';
 
-void main() {
+void main() async {
+  await DateStorage.instance.init();
+
   runApp(const MainApp());
 }
 
