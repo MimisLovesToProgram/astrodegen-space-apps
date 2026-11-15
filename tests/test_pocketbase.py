@@ -4,6 +4,7 @@ import os
 import copy
 import socket
 import json
+import http.client
 import sys
 import subprocess
 import tempfile
@@ -78,7 +79,7 @@ class PocketBaseTests(unittest.TestCase):
             cls.clients[role] = client
 
     def setUp(self):
-        for collection in ("escalation_events", "domain_assessments", "assessment_runs", "assessment_jobs", "astronauts",
+        for collection in ("escalation_events", "domain_assessments", "assessment_runs", "assessment_jobs", "users", "astronauts",
                            "quality_alerts", "quality_checks", "validated_observations", "validation_results", "sensor_packets"):
             path = f"/api/collections/{collection}/records"
             while True:
@@ -105,6 +106,8 @@ class PocketBaseTests(unittest.TestCase):
         self.assertEqual(len(result["ingestion"]["accepted"]), 11)
         self.assertEqual(len(result["ingestion"]["quarantined"]), 1)
         self.assertEqual(len(self.clients["reader"].get_history("a")), 11)
+        self.assertEqual(len(self.worker.get_history("a", source="synthetic_biosensors")), 11)
+        self.assertEqual(self.worker.get_history("a", source="another_sensor"), [])
         self.assertEqual(self.worker.process_pending()["packet_ids"], [])
 
     def test_capture_retry_and_retransmission(self):
@@ -293,6 +296,45 @@ class PocketBaseTests(unittest.TestCase):
                 self.clients[role].claim_assessment_job()
             self.assertEqual(error.exception.status, 403)
 
+    def test_historical_assessment_does_not_rewind_current_state(self):
+        policy = sample_policy()
+        newer = self.worker.enqueue_assessment([observation(60, day=6)], "a", policy,
+                                               as_of=datetime(2026, 11, 6, 12, tzinfo=timezone.utc))
+        run_jobs(self.worker, job_id=newer["id"])
+        older = self.worker.enqueue_assessment([observation(85)], "a", policy,
+                                               as_of=datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+        self.assertEqual(run_jobs(self.worker, job_id=older["id"])["escalation_events"], 0)
+        self.assertEqual(self.worker.list_escalations(), [])
+        self.assertEqual(self.worker.get_assessments("a")[0]["overall_status"], "green")
+        crew = self.admin.request("GET", "/api/collections/astronauts/records")["items"][0]
+        self.assertEqual(crew["status"], "green")
+
+    def test_concurrent_assessment_claims_have_one_owner(self):
+        clock = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+        queued = self.worker.enqueue_assessment([observation(85)], "a", sample_policy(), as_of=clock)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            claims = list(executor.map(lambda _: self.worker.claim_assessment_job(job_id=queued["id"]), range(2)))
+        owned = [claim for claim in claims if claim is not None]
+        self.assertEqual(len(owned), 1)
+        claim = owned[0]
+        result = assess_history(claim["observations"], "a", claim["policy"], as_of=clock)
+        self.worker.complete_assessment_job(queued["id"], claim["claim_token"], result)
+        self.assertEqual(len(self.worker.get_assessments("a")), 1)
+
+    def test_assessment_retry_limit_requires_an_explicit_reset(self):
+        queued = self.worker.enqueue_assessment([observation()], "a", sample_policy(),
+            as_of=datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+        for attempt in range(3):
+            claim = self.worker.claim_assessment_job(job_id=queued["id"])
+            self.worker.fail_assessment_job(queued["id"], claim["claim_token"], "Synthetic failure")
+            if attempt < 2:
+                self.worker.retry_assessment_job(queued["id"])
+        with self.assertRaises(PocketBaseError) as error:
+            self.worker.retry_assessment_job(queued["id"])
+        self.assertEqual(error.exception.status, 409)
+        self.worker.retry_assessment_job(queued["id"], reset_attempts=True)
+        self.assertEqual(len(run_jobs(self.worker, job_id=queued["id"])["completed"]), 1)
+
     def test_sensor_commands_queue_and_run_assessments(self):
         root = Path(__file__).resolve().parents[1]
         env = dict(os.environ, PYTHONPATH=str(root / "src"), POCKETBASE_URL=self.url, POCKETBASE_TOKEN=self.worker.token)
@@ -307,6 +349,120 @@ class PocketBaseTests(unittest.TestCase):
         replay = subprocess.check_output(command, env=env, cwd=root, text=True)
         self.assertTrue(all(json.loads(line)["assessment_status"] == "no_new_data" for line in replay.splitlines()))
         self.assertEqual(len(self.worker.list_assessment_jobs(status="complete")), 21)
+
+    def crew_login(self, crew_id="a", username="crew_a"):
+        profile = self.admin.request("POST", "/api/collections/astronauts/records",
+                                     {"crew_id": crew_id, "name": "Crew " + crew_id, "status": "unknown"})
+        password = uuid.uuid4().hex
+        user = self.admin.request("POST", "/api/collections/users/records", {
+            "username": username, "email": username + "@example.invalid", "password": password,
+            "passwordConfirm": password, "astronaut": profile["id"],
+        })
+        client = PocketBaseTelemetry(self.url)
+        response = client.request("POST", "/api/astrocrates/login", {"username": username, "password": password})
+        self.assertEqual(response["crewId"], crew_id)
+        client.token = response["token"]
+        return client, profile, user, password
+
+    def test_crew_login_and_failed_credentials_contract(self):
+        client, profile, user, password = self.crew_login()
+        self.assertEqual(client.request("GET", "/api/astrocrates/me")["name"], "Crew a")
+        guest = PocketBaseTelemetry(self.url)
+        for payload in ({"username": "crew_a", "password": "wrong"},
+                        {"username": "unknown", "password": password},
+                        {"username": "' OR 1=1", "password": password}, {}):
+            self.assertEqual(guest.request("POST", "/api/astrocrates/login", payload), {"crewId": ""})
+        # We use the same API to authenticate an email identity without ever
+        # accepting a service-account token as a frontend crew session.
+        response = guest.request("POST", "/api/astrocrates/login",
+                                 {"username": "crew_a@example.invalid", "password": password})
+        self.assertEqual(response["crewId"], "a")
+        with self.assertRaises(PocketBaseError):
+            self.worker.request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+
+    def test_crew_cannot_read_or_assign_another_profile(self):
+        client, profile, user, password = self.crew_login()
+        other, other_profile, _, _ = self.crew_login("b", "crew_b")
+        with self.assertRaises(PocketBaseError) as error:
+            client.request("POST", "/api/astrocrates/sensors", {"crewId": "b"})
+        self.assertEqual(error.exception.status, 403)
+        with self.assertRaises(PocketBaseError):
+            client.request("PATCH", "/api/collections/users/records/" + user["id"], {"astronaut": other_profile["id"]})
+        with self.assertRaises(PocketBaseError):
+            PocketBaseTelemetry(self.url).request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+
+    def test_sensor_response_preserves_types_aliases_and_exact_assessment(self):
+        client, _, _, _ = self.crew_login()
+        packet = reading_from("a", Crew["a"][0], 1)
+        packet["hr"] = 85
+        self.ingest.capture(packet, assume_utc=True, reference_time=self.clock)
+        self.worker.process_pending()
+        policy = sample_policy()
+        policy["source"] = "synthetic_biosensors"
+        clock = datetime(2026, 11, 15, 8, tzinfo=timezone.utc)
+        job = self.worker.enqueue_assessment(self.worker.get_history("a"), "a", policy, as_of=clock)
+        self.assertEqual(run_jobs(self.worker, job_id=job["id"])["failed"], [])
+        response = client.request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+        day = response["2026-11-15"]
+        self.assertEqual(day["hr_resting"], [85, 2])
+        self.assertEqual(day["sleep_q"], [4, None])
+        self.assertIs(day["social_interactions"][0], True)
+        self.assertEqual(day["symptoms"][0], [])
+        # We do not carry the older level onto a later, unassessed reading.
+        packet["timestamp"] = "2026-11-15T09:00:00Z"
+        packet["hr"] = 70
+        self.ingest.capture(packet, assume_utc=True, reference_time=self.clock)
+        self.worker.process_pending()
+        newer = client.request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+        self.assertEqual(newer["2026-11-15"]["hr_resting"], [70, None])
+
+    def test_sensor_endpoint_returns_all_days_beyond_default_history_limit(self):
+        client, _, _, _ = self.crew_login()
+        for day in range(1, 31):
+            self.ingest.capture(reading_from("a", Crew["a"][0], day), assume_utc=True,
+                                reference_time=datetime(2026, 12, 20, tzinfo=timezone.utc))
+        self.assertEqual(len(self.worker.process_pending()["ingestion"]["accepted"]), 360)
+        response = client.request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+        self.assertEqual(len(response), 30)
+        self.assertIn("2026-11-15", response)
+        self.assertIn("2026-12-14", response)
+
+    def test_password_adapter_respects_account_auth_rules_and_mfa(self):
+        client, _, _, password = self.crew_login()
+        schema = self.admin.request("GET", "/api/collections/users")
+        guest = PocketBaseTelemetry(self.url)
+        try:
+            self.admin.request("PATCH", "/api/collections/users", {"authRule": "verified = true"})
+            self.assertEqual(guest.request("POST", "/api/astrocrates/login",
+                {"username": "crew_a", "password": password}), {"crewId": ""})
+            self.admin.request("PATCH", "/api/collections/users", {"authRule": schema["authRule"],
+                "otp": {**schema["otp"], "enabled": True}, "mfa": {**schema["mfa"], "enabled": True}})
+            self.assertEqual(guest.request("POST", "/api/astrocrates/login",
+                {"username": "crew_a", "password": password}), {"crewId": ""})
+        finally:
+            self.admin.request("PATCH", "/api/collections/users", {"authRule": schema["authRule"],
+                "mfa": schema["mfa"], "otp": schema["otp"]})
+
+    def test_login_rate_limit_is_local_to_the_route_and_client(self):
+        from urllib.parse import urlsplit
+        address = urlsplit(self.url)
+        # We use another loopback source address so this rate-limit test cannot
+        # block valid logins in the other integration tests.
+        connection = http.client.HTTPConnection(address.hostname, address.port, source_address=("127.0.0.2", 0))
+        self.addCleanup(connection.close)
+        throttled = False
+        for _ in range(202):
+            connection.request("POST", "/api/astrocrates/login",
+                               json.dumps({"username": "unknown", "password": "bad"}),
+                               {"Content-Type": "application/json"})
+            response = connection.getresponse()
+            response.read()
+            if response.status == 429:
+                throttled = True
+                self.assertIsNotNone(response.getheader("Retry-After"))
+                break
+            self.assertEqual(response.status, 200)
+        self.assertTrue(throttled)
 
 
 if __name__ == "__main__":
