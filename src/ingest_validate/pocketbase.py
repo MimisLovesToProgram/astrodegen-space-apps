@@ -154,3 +154,36 @@ class PocketBaseTelemetry:
     def get_audit_summary(self):
         """Read worker-only aggregate counts without downloading raw packets."""
         return self.request("GET", "/api/astrocrates/quality-summary")
+
+    def save_quality_alerts(self, snapshot):
+        from .alerts import validate_snapshot
+        validate_snapshot(snapshot)
+        return self.request("POST", "/api/astrocrates/quality-alerts", snapshot)
+
+    def list_quality_alerts(self, *, status="active", astronaut_id=None, policy_name=None, limit=100):
+        if status not in {"active", "resolved", "all"} or type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("Use status active/resolved/all and an integer limit between 1 and 10000")
+        conditions = []
+        for field, value in (("status", None if status == "all" else status),
+                             ("astronaut_id", astronaut_id), ("policy_name", policy_name)):
+            if value is not None:
+                conditions.append(field + "=" + json_string(value))
+        alerts, page = [], 1
+        page_size = min(limit, 500)
+        while len(alerts) < limit:
+            records = self.request("GET", "/api/collections/quality_alerts/records", query={
+                "filter": " && ".join(conditions), "sort": "-last_checked_at,alert_key",
+                "perPage": page_size, "page": page, "skipTotal": "true",
+            })["items"]
+            # We return the same public fields as SQLite and hide PocketBase's
+            # collection metadata from callers that use either backend.
+            for record in records:
+                alert = {key: record[key] for key in (
+                    "alert_key", "scope_key", "policy_name", "astronaut_id", "metric", "source", "kind",
+                    "status", "first_detected_at", "last_checked_at", "resolved_at", "occurrences", "evidence")}
+                alert["resolved_at"] = alert["resolved_at"] or None
+                alerts.append(alert)
+            if len(records) < page_size:
+                break
+            page += 1
+        return alerts[:limit]

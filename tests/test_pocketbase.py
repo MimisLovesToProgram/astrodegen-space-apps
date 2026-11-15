@@ -16,6 +16,8 @@ from urllib.error import URLError
 
 from biosensors import Crew, reading_from
 from ingest_validate.pocketbase import PocketBaseError, PocketBaseTelemetry
+from ingest_validate.alerts import alert_snapshot
+from ingest_validate.quality import quality_report
 
 
 @unittest.skipUnless(os.environ.get("POCKETBASE_TEST_BINARY"), "Set POCKETBASE_TEST_BINARY to run real API tests")
@@ -72,7 +74,7 @@ class PocketBaseTests(unittest.TestCase):
             cls.clients[role] = client
 
     def setUp(self):
-        for collection in ("validated_observations", "validation_results", "sensor_packets"):
+        for collection in ("quality_alerts", "quality_checks", "validated_observations", "validation_results", "sensor_packets"):
             path = f"/api/collections/{collection}/records"
             while True:
                 rows = self.admin.request("GET", path, query={"perPage": 500})["items"]
@@ -171,6 +173,47 @@ class PocketBaseTests(unittest.TestCase):
         with self.assertRaises(PocketBaseError) as error:
             self.clients["reader"].get_audit_summary()
         self.assertEqual(error.exception.status, 403)
+
+    def monitoring_snapshot(self, minute=2, present=False):
+        history = [{"astronaut_id": "a", "metric": "spo2", "source": "sensor",
+                    "captured_at": f"2026-11-22T12:{minute:02d}:00Z"}] if present else []
+        return alert_snapshot(quality_report(
+            history, "a", max_age_seconds=60, expected_metrics=["spo2"],
+            reference_time=datetime(2026, 11, 22, 12, minute, tzinfo=timezone.utc)), "test")
+
+    def test_alert_lifecycle_and_permissions(self):
+        snapshot = self.monitoring_snapshot()
+        self.assertEqual(self.worker.save_quality_alerts(snapshot)["opened"], 1)
+        self.assertEqual(self.worker.save_quality_alerts(snapshot)["opened"], 0)
+        self.assertEqual(len(self.clients["reader"].list_quality_alerts()), 1)
+        with self.assertRaises(PocketBaseError) as error:
+            self.clients["ingest"].save_quality_alerts(snapshot)
+        self.assertEqual(error.exception.status, 403)
+        self.assertEqual(self.worker.save_quality_alerts(self.monitoring_snapshot(3, True))["resolved"], 1)
+        self.assertTrue(self.worker.save_quality_alerts(snapshot)["ignored_older_report"])
+        self.assertEqual(self.worker.list_quality_alerts(), [])
+        self.assertEqual(self.worker.save_quality_alerts(self.monitoring_snapshot(4))["reopened"], 1)
+        self.assertEqual(self.worker.list_quality_alerts()[0]["occurrences"], 2)
+
+    def test_concurrent_monitors_open_one_alert(self):
+        snapshot = self.monitoring_snapshot()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: self.worker.save_quality_alerts(snapshot), range(2)))
+        self.assertEqual(sum(result["opened"] for result in results), 1)
+        self.assertEqual(len(self.worker.list_quality_alerts()), 1)
+
+    def test_alert_failure_rolls_back_the_complete_snapshot(self):
+        snapshot = alert_snapshot(quality_report(
+            [], "a", max_age_seconds=60, expected_metrics=["spo2", "mood"],
+            reference_time=datetime(2026, 11, 22, 12, 2, tzinfo=timezone.utc)), "test")
+        # We force the second insert to violate a collection constraint, after
+        # the first insert has run, to verify server-side transaction rollback.
+        snapshot["alerts"][1]["metric"] = "x" * 101
+        with self.assertRaises(PocketBaseError):
+            self.worker.request("POST", "/api/astrocrates/quality-alerts", snapshot)
+        self.assertEqual(self.worker.list_quality_alerts(status="all"), [])
+        checks = self.worker.request("GET", "/api/collections/quality_checks/records")
+        self.assertEqual(checks["totalItems"], 0)
 
 
 if __name__ == "__main__":
