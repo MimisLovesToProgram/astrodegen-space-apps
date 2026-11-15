@@ -189,7 +189,7 @@ class _StatusScreenState extends State<StatusScreen> {
                     width: 50,
                     child: CircularProgressIndicator(
                       color: Colors.white,
-                      strokeWidth: 8,                      
+                      strokeWidth: 8,
                     ),
                   )
 

@@ -4,7 +4,7 @@ import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
-enum QuestionType {num, onetofive, yesno}
+enum QuestionType {num, onetofive, yesno, list}
 
 class Question {
   Question({
@@ -20,8 +20,10 @@ class Question {
   /// For onetofive, an int 1-5.
   /// For yesno, 1 for yes, 0 for no.
   /// Null means yet unanswered.
-  int? answer;
-  int? defaultAns;
+  int? numAnswer;
+
+  /// For list questions
+  List<String>? listAns;
 }
 
 /// Singleton class for the current user

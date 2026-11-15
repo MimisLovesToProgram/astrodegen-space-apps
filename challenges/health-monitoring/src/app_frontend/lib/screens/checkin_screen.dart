@@ -74,6 +74,10 @@ class _CheckinScreenState extends State<CheckinScreen> {
                         width: 150,
                         child: NumTextField(key: ObjectKey(currentQuestion), q: currentQuestion)
                       ),
+
+                    // If it's a list, give a text field for text
+                    if (currentQuestion.type == QuestionType.list)
+                      ListTextField(key: ObjectKey(currentQuestion), q: currentQuestion),
                 
                     // If it's a 1-5, give a slider
                     if (currentQuestion.type == QuestionType.onetofive)
@@ -92,7 +96,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 255, 100, 100)),
                               onPressed: () async {
-                                currentQuestion.answer = 0;
+                                currentQuestion.numAnswer = 0;
                                 
                                 if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
                                  
@@ -133,7 +137,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
                               style: FilledButton.styleFrom(backgroundColor: const Color.fromARGB(255, 142, 250, 18)),
                               onPressed: () async {
-                                currentQuestion.answer = 1;
+                                currentQuestion.numAnswer = 1;
 
                                 if (currentQuestionIndx + 1 < AppData.instance.checkinQuestions.length) {
                                   
@@ -206,7 +210,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () {
-                                if (currentQuestion.answer != null) {
+                                if (currentQuestion.numAnswer != null) {
                                 
                                   setState(() {
                                     currentQuestionIndx++;
@@ -243,7 +247,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                             child: FilledButton(
 
                               onPressed: () async {
-                                if (currentQuestion.answer != null) {
+                                if (currentQuestion.numAnswer != null) {
                                 
                                   setState(() {
                                     gettingSensorData = true;
@@ -356,8 +360,38 @@ class _NumTextFieldState extends State<NumTextField> {
       onChanged: (value) {
         int? ans = int.tryParse(value);
         if (ans != null) {
-          widget.q.answer = ans;
+          widget.q.numAnswer = ans;
         }
+      },
+    );
+
+  }
+
+}
+
+class ListTextField extends StatefulWidget {
+  const ListTextField({super.key, required this.q});
+
+  final Question q;
+
+  @override
+  State<ListTextField> createState() => _ListTextFieldState();
+}
+
+class _ListTextFieldState extends State<ListTextField> {
+
+  TextEditingController listTextController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+
+    return TextField(
+      controller: listTextController,
+      decoration: fieldDecoration("Symptoms List"),
+
+      onChanged: (value) {
+        final symptoms = value.split(",");
+        widget.q.listAns = symptoms;
       },
     );
 
@@ -382,7 +416,7 @@ class _OneToFiveSliderState extends State<OneToFiveSlider> {
   void initState() {
     super.initState();
 
-    widget.q.answer = 3;
+    widget.q.numAnswer = 3;
   }
 
   @override
