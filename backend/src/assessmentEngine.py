@@ -19,10 +19,13 @@ This module does NOT generate sensor readings, validate ingestion,
 create action cards, or send escalations.
 """
 
+import logging
 from datetime import datetime
 from statistics import mean
 
 from step2_config import RISK_MODELS
+
+logger = logging.getLogger(__name__)
 
 # PocketBase access and the sensor_readings value encoding live in
 # DataPopulateEngine; this module reuses them so both engines agree on
@@ -445,6 +448,13 @@ def assess_astronaut(telemetry_history, crew_id=None):
         for domain in RISK_MODELS
     }
 
+    for domain, result in results.items():
+        logger.debug(
+            "crew %s domain %s: score=%d level=%s rules=%s",
+            crew_id or history[-1].get("crew_id"), domain,
+            result["risk_score"], result["risk_level"],
+            [rule["metric"] for rule in result["matched_rules"]])
+
     # Identify the highest-priority risk.
     priority = [
         "cardiovascular",
@@ -511,6 +521,9 @@ def load_history(crew_id, store):
             break
         page += 1
 
+    logger.info("Loaded %d sensor_readings for crew %s",
+                len(records), crew_id)
+
     days = {}
     for record in records:
         if not record.get("captured_at") or not record.get("select"):
@@ -529,10 +542,15 @@ def load_history(crew_id, store):
         packet[record["select"]] = _deserialize_value(
             record["select"], record["value"])
 
-    return sorted(
+    history = sorted(
         days.values(),
         key=lambda packet: (packet["mission_day"], packet["timestamp"]),
     )
+    logger.info("Grouped crew %s readings into %d daily packets "
+                "(mission days %s)",
+                crew_id, len(history),
+                sorted({p["mission_day"] for p in history}))
+    return history
 
 
 def save_assessment(crew_id, assessment, store):
@@ -558,6 +576,9 @@ def save_assessment(crew_id, assessment, store):
                 "details": details,
             },
         )
+        logger.debug("Posted %s assessment for crew %s: %s score=%d",
+                     domain, crew_id, result["risk_level"].lower(),
+                     result["risk_score"])
 
 
 def assess_crew(crew_id, store=None, post=True):
@@ -567,10 +588,17 @@ def assess_crew(crew_id, store=None, post=True):
     results. Set post=False to compute without writing.
     """
     store = store or PocketBaseStore.from_environment()
+    logger.info("Assessing crew %s (post=%s)", crew_id, post)
     history = load_history(crew_id, store)
     assessment = assess_astronaut(history, crew_id=crew_id)
+    logger.info(
+        "Crew %s assessed: overall=%s highest_risk=%s day=%s",
+        crew_id, assessment["overall_status"],
+        assessment["highest_risk_domain"], assessment["mission_day"])
     if post:
         save_assessment(crew_id, assessment, store)
+        logger.info("Posted %d domain_assessments records for crew %s",
+                    len(assessment["domain_assessments"]), crew_id)
     return assessment
 
 
@@ -582,6 +610,7 @@ def assess_all(store=None, post=True, crew_ids=("a", "b", "c")):
         try:
             results[crew_id] = assess_crew(crew_id, store, post=post)
         except ValueError as error:
+            logger.warning("Skipping crew %s: %s", crew_id, error)
             results[crew_id] = {"error": str(error)}
     return results
 
