@@ -467,3 +467,30 @@ class PocketBaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_older_other_policy_cannot_rewind_crew_status(self):
+        client, _, _, _ = self.crew_login()
+        for day, value, policy_id in ((5, 95, "current"), (4, 60, "older-other-policy")):
+            policy = sample_policy()
+            policy["policy_id"] = policy_id
+            for domain in policy["domains"].values():
+                domain["rules"][0]["points"] = 90
+            job = self.worker.enqueue_assessment([observation(value, day=day)], "a", policy,
+                as_of=datetime(2026, 11, day, 12, tzinfo=timezone.utc))
+            self.assertEqual(run_jobs(self.worker, job_id=job["id"])["failed"], [])
+            self.assertEqual(client.request("GET", "/api/astrocrates/me")["status"], "red")
+        self.assertEqual(len(self.worker.list_escalations()), 4)
+
+    def test_incomplete_domain_still_emits_confirmed_escalation(self):
+        policy = sample_policy()
+        policy["domains"]["immune"]["rules"].append({
+            "id": "missing-spo2", "metric": "spo2", "feature": "value",
+            "operator": "lt", "threshold": 95, "points": 20, "level": 2})
+        job = self.worker.enqueue_assessment([observation(85)], "a", policy,
+            as_of=datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+        outcome = run_jobs(self.worker, job_id=job["id"])
+        self.assertEqual(outcome["failed"], [])
+        self.assertEqual(outcome["escalation_events"], 4)
+        immune = self.worker.get_assessments("a")[0]["domains"]["immune"]
+        self.assertTrue(immune["score_is_lower_bound"])
+        self.assertEqual(immune["risk_score"], 70)

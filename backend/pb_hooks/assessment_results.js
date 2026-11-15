@@ -41,9 +41,11 @@ module.exports.complete = (e) => {
       output = {run_id: existing[0].id, duplicate: true, events: 0};
       return;
     }
+    // We compare every policy before updating the shared crew profile.
+    // Historical results from a new policy must not rewind current status.
     const priorRuns = tx.findRecordsByFilter("assessment_runs",
-      "astronaut_id={:crew} && policy_digest={:policy}", "-assessed_at,-created_at,-id", 1, 0,
-      {crew: result.astronaut_id, policy: result.policy_digest});
+      "astronaut_id={:crew}", "-assessed_at,-created_at,-id", 1, 0,
+      {crew: result.astronaut_id});
     const advancesCurrent = !priorRuns.length || priorRuns[0].getString("assessed_at") <= result.assessed_at;
     const crewMatches = tx.findRecordsByFilter("astronauts", "crew_id={:crew} || id={:crew}", "", 1, 0,
                                               {crew: result.astronaut_id});

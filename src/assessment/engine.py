@@ -102,13 +102,18 @@ def assess_history(history, astronaut_id, policy, *, as_of=None):
             metric_rules.setdefault(result["metric"], []).append(result)
         known_points = sum(result["points"] or 0 for result in rules)
         complete = all(result["available"] for result in rules)
-        score = min(100, known_points) if complete else None
-        level = max(band["level"] for band in definition["bands"] if score >= band["min_points"]) if complete else None
+        lower_bound = min(100, known_points)
+        confirmed_level = max(band["level"] for band in definition["bands"] if lower_bound >= band["min_points"])
+        # We preserve a proven warning even when another input is missing.
+        # The score is then a lower bound, never a complete or green result.
+        score = lower_bound if complete or confirmed_level > 0 else None
+        level = confirmed_level if score is not None else None
         # We never label a domain green merely because a baseline or required
         # metric is missing. We retain the unavailable rules for explanation.
         domains[name] = {"risk_score": score, "known_points": known_points, "level": level,
                          "status": COLORS[level] if level is not None else "unknown",
-                         "data_status": "complete" if complete else "insufficient_data", "rules": rules}
+                         "data_status": "complete" if complete else "insufficient_data",
+                         "score_is_lower_bound": not complete and score is not None, "rules": rules}
     metrics = {}
     for metric, rules in metric_rules.items():
         known = [rule["level"] for rule in rules if rule["available"]]
@@ -132,4 +137,4 @@ def assess_history(history, astronaut_id, policy, *, as_of=None):
             "score_type": "configured_points", "input_digest": input_digest, "observation_count": len(ordered),
             "excluded_future_observations": future_count, "domains": domains, "metrics": metrics,
             "overall_level": overall, "overall_status": COLORS[overall] if overall is not None else "unknown",
-            "assessment_complete": all(domain["level"] is not None for domain in domains.values())}
+            "assessment_complete": all(domain["data_status"] == "complete" for domain in domains.values())}

@@ -72,3 +72,14 @@ class EngineTests(unittest.TestCase):
             policy["domains"]["immune"]["rules"][0][field] = value
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                 validate_policy(policy)
+
+    def test_missing_input_preserves_confirmed_domain_warning(self):
+        self.policy["domains"]["immune"]["rules"].append({
+            "id": "missing-spo2", "metric": "spo2", "feature": "value",
+            "operator": "lt", "threshold": 95, "points": 20, "level": 2})
+        result = assess_history([observation(85)], "a", self.policy, as_of=self.clock)
+        domain = result["domains"]["immune"]
+        self.assertEqual(domain["risk_score"], 70)
+        self.assertEqual(domain["level"], 2)
+        self.assertTrue(domain["score_is_lower_bound"])
+        self.assertFalse(result["assessment_complete"])
