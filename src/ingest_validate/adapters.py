@@ -21,7 +21,7 @@ SENSOR_FIELDS = {
 }
 
 
-def sensor_observations(packets, *, assume_utc=False):
+def sensor_observations(packets, *, assume_utc=False, source="synthetic_biosensors"):
     """Expand full biosensors packets; missing fields are quarantined downstream.
 
     This adapter is for the synthetic biosensors.py schema, not real sensors.
@@ -35,7 +35,9 @@ def sensor_observations(packets, *, assume_utc=False):
             yield packet
             continue
         timestamp = packet.get("timestamp")
-        context = {"simulated": True}
+        context = {"simulated": source == "synthetic_biosensors"}
+        if source == "crew_checkin":
+            context["input_type"] = "self_report"
         if assume_utc and isinstance(timestamp, str):
             try:
                 parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -44,13 +46,19 @@ def sensor_observations(packets, *, assume_utc=False):
                     context["timestamp_timezone_assumed"] = "UTC"
             except ValueError:
                 pass  # Let the validator audit the malformed timestamp.
-        for field, (metric, unit) in SENSOR_FIELDS.items():
+        fields = dict(SENSOR_FIELDS)
+        if source == "crew_checkin":
+            fields = {field: fields[field] for field in ("sleep_h", "sleep_quality", "mood", "symptoms", "exercise_logged", "social_interaction")}
+            fields["activity_pct_target"] = ("activity_pct_target", "%")
+        elif "activity_pct_target" in packet:
+            fields["activity_pct_target"] = ("activity_pct_target", "%")
+        for field, (metric, unit) in fields.items():
             # A missing field becomes None and is quarantined independently;
             # other valid fields from the same packet can still be accepted.
             yield {
                 "astronaut_id": packet.get("crew_id"), "metric": metric,
                 "value": packet.get(field), "unit": unit,
-                "captured_at": timestamp, "source": "synthetic_biosensors",
+                "captured_at": timestamp, "source": source,
                 "context": context,
             }
 

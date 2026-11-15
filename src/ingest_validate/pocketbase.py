@@ -97,7 +97,7 @@ class PocketBaseTelemetry:
         packet = json.loads(record["payload"]) if record["payload_encoding"] == "json" else record["payload"]
         clock = datetime.fromisoformat((record["validation_time"] or record["received_at"]).replace("Z", "+00:00"))
         results = []
-        for raw in sensor_observations([packet], assume_utc=record["assume_utc"]):
+        for raw in sensor_observations([packet], assume_utc=record["assume_utc"], source=record["source"]):
             result = validate_observation(raw, clock)
             observation = result["observation"]
             if observation is not None:

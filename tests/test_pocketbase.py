@@ -464,10 +464,6 @@ class PocketBaseTests(unittest.TestCase):
             self.assertEqual(response.status, 200)
         self.assertTrue(throttled)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_older_other_policy_cannot_rewind_crew_status(self):
         client, _, _, _ = self.crew_login()
         for day, value, policy_id in ((5, 95, "current"), (4, 60, "older-other-policy")):
@@ -494,3 +490,43 @@ if __name__ == "__main__":
         immune = self.worker.get_assessments("a")[0]["domains"]["immune"]
         self.assertTrue(immune["score_is_lower_bound"])
         self.assertEqual(immune["risk_score"], 70)
+
+    def test_checkin_is_durable_owned_and_idempotent(self):
+        client, _, _, _ = self.crew_login()
+        values = {"sleep_h": 5.5, "sleep_quality": 2, "mood": 2, "symptoms": ["fatigue"],
+                  "exercise_logged": False, "social_interaction": True, "activity_pct_target": 40}
+        body = {"crewId": "a", "deliveryKey": "checkin-test-12345", "values": values}
+        first = client.request("POST", "/api/astrocrates/checkin", body)
+        retry = client.request("POST", "/api/astrocrates/checkin", body)
+        self.assertEqual(first["id"], retry["id"])
+        self.assertTrue(retry["replay"])
+        self.assertEqual(self.worker.get_history("a"), [])
+        result = self.worker.process_pending()
+        self.assertEqual(len(result["ingestion"]["accepted"]), 7)
+        self.assertEqual(result["ingestion"]["quarantined"], [])
+        history = self.worker.get_history("a")
+        self.assertTrue(all(item["source"] == "crew_checkin" and not item["context"]["simulated"] for item in history))
+        symptoms = next(item for item in history if item["metric"] == "symptoms")
+        self.assertEqual(symptoms["value"], ["fatigue"])
+        daily = client.request("POST", "/api/astrocrates/sensors", {"crewId": "a"})
+        self.assertEqual(len(daily), 1)
+        self.assertEqual(next(iter(daily.values()))["activity_pct_target"], [40, None])
+        with self.assertRaises(PocketBaseError) as error:
+            client.request("POST", "/api/astrocrates/checkin", {**body, "values": {**values, "mood": 4}})
+        self.assertEqual(error.exception.status, 409)
+        with self.assertRaises(PocketBaseError) as error:
+            client.request("POST", "/api/astrocrates/checkin", {**body, "crewId": "b"})
+        self.assertEqual(error.exception.status, 403)
+
+    def test_invalid_checkin_does_not_create_raw_or_clean_records(self):
+        client, _, _, _ = self.crew_login()
+        for symptoms in (2, [""], ["fatigue"]):
+            values = {"sleep_h": 25, "sleep_quality": 2, "mood": 2, "symptoms": symptoms,
+                      "exercise_logged": False, "social_interaction": True, "activity_pct_target": 40}
+            with self.assertRaises(PocketBaseError):
+                client.request("POST", "/api/astrocrates/checkin", {"crewId": "a", "deliveryKey": "bad-checkin-1234", "values": values})
+        self.assertEqual(self.worker.request("GET", "/api/collections/sensor_packets/records")["totalItems"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

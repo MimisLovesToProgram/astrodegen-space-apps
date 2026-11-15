@@ -8,3 +8,6 @@ routerAdd("POST", "/api/astrocrates/sensors", (e) => {
 routerAdd("GET", "/api/astrocrates/me", (e) => {
   return require(__hooks + "/crew_api.js").me(e);
 }, $apis.requireAuth("users"));
+routerAdd("POST", "/api/astrocrates/checkin", (e) => {
+  return require(__hooks + "/crew_checkin.js").save(e);
+}, $apis.requireAuth("users"));
