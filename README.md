@@ -1,13 +1,4 @@
 # Astrocrates
-
-> \[!WARNING]
-> Pliz push to to `dev` branch NOT MAIN!!!!!!!!
-> even better Branch off dev , add your feature in a feature branch `feature/<MyFeature>` and
-> then merge back to dev... just so we dont have many conflicts
-
-
-
-
 An astronaut health-monitoring prototype by ASTRODEGEN. Synthetic sensor data is saved, validated, and prepared for health assessment. The risk engine is still pending.
 
 ## Structure
